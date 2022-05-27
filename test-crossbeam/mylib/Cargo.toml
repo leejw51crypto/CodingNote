@@ -1,0 +1,22 @@
+[package]
+name = "mylib"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cxx = "1.0"
+anyhow="1"
+libc="0"
+tokio="1"
+chrono="0"
+hex="0"
+rand="0"
+
+[build-dependencies]
+cxx-build = "1.0"
+
+
+[lib]
+crate-type = ["staticlib"]
