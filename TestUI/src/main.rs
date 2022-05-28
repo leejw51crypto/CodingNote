@@ -27,6 +27,11 @@ fn app(cx: Scope) -> Element {
     let mut count = use_state(&cx, || 0);
     cx.render(rsx! (
         div {
+            img { class: "block w-8 h-8",
+                src: "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/ubuntu.svg",
+            }
+
+            
             h1 { "count={count}"}
             button {onclick: move |_| count+=1, "+"}
             button {onclick: move |_| count-=1, "-"}
@@ -67,7 +72,17 @@ fn app(cx: Scope) -> Element {
                 src: "https://i.imgur.com/ffgW9JQ.png",
             }
 
-           
+
+            img { class: "block w-8 h-8",
+                src: "http://littlesvr.ca/apng/images/clock.gif",
+            }
+
+            img { class: "block w-8 h-8",
+                src: "http://littlesvr.ca/apng/images/o_sample.png",
+            }
+
+            
+            
             
             
             
