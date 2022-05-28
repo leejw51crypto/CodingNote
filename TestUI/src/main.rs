@@ -27,6 +27,10 @@ fn app(cx: Scope) -> Element {
     let mut count = use_state(&cx, || 0);
     cx.render(rsx! (
         div {
+            img {
+                src:"https://media.giphy.com/media/PQ0VI3S5vqL5pwQQJX/giphy.gif"
+            }
+
             img { class: "block w-8 h-8",
                 src: "https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/ubuntu.svg",
             }
