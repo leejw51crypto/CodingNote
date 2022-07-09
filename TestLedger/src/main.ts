@@ -7,9 +7,36 @@ import { LedgerSigner } from "@cosmjs/ledger-amino";
 // eslint-disable-next-line @typescript-eslint/naming-convention
 import TransportNodeHid from "@ledgerhq/hw-transport-node-hid";
 import { MsgSendEncodeObject, SigningStargateClient } from "@cosmjs/stargate";
-import { TxRaw } from "cosmjs-types/cosmos/tx/v1beta1/tx";
+import { TxRaw, TxBody, AuthInfo} from "cosmjs-types/cosmos/tx/v1beta1/tx";
+import {MsgSend} from "cosmjs-types/cosmos/bank/v1beta1/tx";
 
 import {toHex} from "@cosmjs/encoding";
+
+
+function showTxRaw(txrawbytes: Uint8Array) {
+  // convert Tx from txrawbytes 
+  const txraw = TxRaw.decode(txrawbytes);
+  
+  console.log("txraw josn:", JSON.stringify(txraw));
+
+  const body = TxBody.decode(txraw.bodyBytes);
+  const authInfo =AuthInfo.decode(txraw.authInfoBytes);
+  console.log("body json:", JSON.stringify(body));
+  console.log("authInfo json:", JSON.stringify(authInfo));
+  console.log("signature:", JSON.stringify(txraw.signatures));
+  // convert any to MsgSend
+  //const msgSend = MsgSend.decode(body.messages[0]);
+  const message= body.messages[0];
+  // print message.typeUrl
+  console.log("message typeUrl:", message.typeUrl);
+  // print message.value
+  console.log("message value:", JSON.stringify(message.value));
+  const sendmessage= MsgSend.decode(message.value);
+  console.log("message:", JSON.stringify(sendmessage));
+  
+
+}
+
 
 // disalble eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function SendLedger(toaddr:string,amount="1", amountdenom="uatom", feeamount="1", feedenom="uatom", feegas="95000", memo="", chainid="theta-testnet-001",rpcendpoint="https://rpc.sentry-01.theta-testnet.polypore.xyz") {
@@ -65,6 +92,7 @@ async function SendLedger(toaddr:string,amount="1", amountdenom="uatom", feeamou
   const hexstring = toHex(signedBytes);
   console.log(`signedBytes in hex: ${hexstring}`);
   
+  showTxRaw(signedBytes);
   const txreceipt=await client.broadcastTx(signedBytes);
   console.log(`tx receipt json: ${JSON.stringify(txreceipt)}`);
 
