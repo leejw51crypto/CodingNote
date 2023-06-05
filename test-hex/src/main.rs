@@ -24,11 +24,22 @@ fn test2() {
     let c= U256::from_big_endian(&bytes);
     println!("c={}",c);
 }
+fn pad_zero(s: String) -> String {
+    if s.len() % 2 != 0 {
+        format!("0{}", s)
+    } else {
+        s
+    }
+}
+
 fn main() {
-    let a= U256::from_dec_str("100").unwrap();
+    let a= U256::from_dec_str("1000").unwrap();
     let mut b= format!("{:x}",a);
-    if b.len()%2!=0 {
-        b="0".to_string()+&b;
-    } 
+    b=pad_zero(b);
+    let bytes=  hex::decode(&b).unwrap();
+    let c= U256::from_big_endian(&bytes);
+    println!("a={}",a);
     println!("b={}",b);
+    println!("c={}",c);
+    assert_eq!(a,c);
 }
