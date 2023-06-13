@@ -1,0 +1,23 @@
+{
+  "name": "cryptofireserver",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "format": "prettier --config .prettierrc 'scripts/**/*.ts' --write"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^1.0.2",
+    "hardhat": "^2.13.0",
+    "prettier": "^2.7.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.8.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.7.3",
+    "json-rpc-2.0": "^1.4.1",
+    "openzeppelin-solidity": "^2.2.0"
+  }
+}
