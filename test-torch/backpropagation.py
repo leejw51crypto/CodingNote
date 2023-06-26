@@ -1,26 +1,19 @@
 import numpy as np
+import torch
+import torchviz
+from torch import nn
 
-class AffineLayer:
+
+class AffineLayer(nn.Module):
     def __init__(self, input_size, output_size):
+        super(AffineLayer, self).__init__()  # Call the constructor of nn.Module
         self.input_size = input_size
         self.output_size = output_size
-        self.weights = np.random.randn(input_size, output_size)
-        self.bias = np.zeros(output_size)
-        self.inputs = None
-        self.weights_gradient = None
-        self.bias_gradient = None
+        self.weights = nn.Parameter(torch.randn(input_size, output_size))
+        self.bias = nn.Parameter(torch.zeros(output_size))
 
     def forward(self, inputs):
-        self.inputs = inputs
-        return np.dot(inputs, self.weights) + self.bias
-
-    def backward(self, grad_output, learning_rate):
-        self.weights_gradient = np.dot(self.inputs.T, grad_output)
-        self.bias_gradient = np.sum(grad_output, axis=0)
-        grad_input = np.dot(grad_output, self.weights.T)
-        self.weights -= learning_rate * self.weights_gradient
-        self.bias -= learning_rate * self.bias_gradient
-        return grad_input
+        return torch.matmul(inputs, self.weights) + self.bias
 
 
 # Example usage
@@ -28,15 +21,16 @@ class AffineLayer:
 layer = AffineLayer(2, 3)
 
 # Forward pass
-x = np.array([[1, 2]])
+x = torch.tensor([[1, 2]], dtype=torch.float32)
 output = layer.forward(x)
 print("Forward pass output:")
 print(output)
 
 # Backward pass
-grad_output = np.ones_like(output)
+grad_output = torch.ones_like(output)
 learning_rate = 0.1
-grad_input = layer.backward(grad_output, learning_rate)
+output.backward(gradient=grad_output)
+grad_input = x.grad
 print("Backward pass gradient:")
 print(grad_input)
 
@@ -45,3 +39,10 @@ print("Updated weights:")
 print(layer.weights)
 print("Updated bias:")
 print(layer.bias)
+
+
+# Visualize computation graph
+dummy_input = torch.randn(1, 2)  # Create a dummy input
+dot = torchviz.make_dot(layer(dummy_input), params=dict(layer.named_parameters()))
+dot.format = 'png'  # Specify the image format (e.g., 'png', 'svg')
+dot.render(filename='backpropagation')  # Save the computation graph as an image file
