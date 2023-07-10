@@ -30,3 +30,5 @@ artifacts/
 cache/
 *.pth
 .vscode/
+typechain-types/
+.prettierrc
