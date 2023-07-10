@@ -88,7 +88,7 @@ def ask_and_get_response(question, qdrant_client, retrieval_model):
     )
 
     return {
-        "response": response["choices"][0]["text"],
+        "response": response,
         "references": references,
     }
 
@@ -101,11 +101,12 @@ def main():
     retrieval_model = setup_sentence_transformer(device)
     
     text = input("Enter your question: ")
-    response=ask(text, qdrant_client, retrieval_model)
+    #response=ask(text, qdrant_client, retrieval_model)
+    response=ask_and_get_response(text, qdrant_client, retrieval_model)
     print("\n" + "-" * 40 + "\n")
-    print(f"{response[0]}")
+    print(f"{response}")
     print("\n" + "-" * 40 + "\n")
-    print("copy & paste to chatgpt")
+    #print("copy & paste to chatgpt")
 
 if __name__ == "__main__":
     main()
