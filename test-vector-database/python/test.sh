@@ -1,0 +1,2 @@
+URL=$QDRANT_HOST
+echo $URL
