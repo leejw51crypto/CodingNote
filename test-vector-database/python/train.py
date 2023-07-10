@@ -50,13 +50,20 @@ def encode_sentences(df, model_name, device, batch_size):
     for doc in tqdm(df["sentence"].to_list()):
         batch.append(doc)
         if len(batch) >= batch_size:
-            vectors.append(model.encode(batch))
+            encoded=model.encode(batch)
+            print(f"batch length {len(batch)}")
+            print(f"encoded length {len(encoded)}")
+            vectors.append(encoded)
             batch = []
 
     if len(batch) > 0:
-        vectors.append(model.encode(batch))
+        encoded=model.encode(batch)
+        print(f"batch length {len(batch)}")
+        print(f"encoded length {len(encoded)}")
+        vectors.append(encoded)
         batch = []
     
+    # [[1,2,3],[4,5,6]] => [1,2,3,4,5,6]
     vectors = np.concatenate(vectors)
     return vectors
 
@@ -88,6 +95,7 @@ def main():
     items = load_data(DATA_PATH)
     client = create_qdrant_client(QDRANT_HOST)
     df = prepare_data(items)
+    print("beging encoding")
     vectors = encode_sentences(df, MODEL_NAME, DEVICE, BATCH_SIZE)
     ids, payloads = create_payloads(df, vectors)
     upload_data(client, ids, payloads, vectors)

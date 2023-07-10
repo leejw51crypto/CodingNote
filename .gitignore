@@ -24,3 +24,9 @@ test-crossbeam/a.out
 .gitignore
 .gitignore
 test-crossbeam/myprogram
+target/
+debug/
+artifacts/
+cache/
+*.pth
+.vscode/
