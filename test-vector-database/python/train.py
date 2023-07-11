@@ -10,6 +10,7 @@ from qdrant_client.http import models
 
 COLLECTION_NAME="mybook"
 DATA_PATH = "data.json"
+# http://localhost:6333
 QDRANT_HOST = os.environ.get('QDRANT_HOST')
 BATCH_SIZE = 512
 MODEL_NAME = "msmarco-MiniLM-L-6-v3"
