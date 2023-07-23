@@ -24,15 +24,18 @@ fn main() -> io::Result<()> {
     key=key.trim().to_string();    
     // if key is empty
     if key.is_empty() {
-        println!("Key is empty");
-        return Ok(());
+        println!("Use all");
     }
-    let totaljson:serde_json::Value=serde_json::from_str(&content)?;
-    let keyjson= totaljson[key].clone();
-    content= keyjson.to_string();    
+    else {
+        println!("use key:{}",key);
+        let totaljson:serde_json::Value=serde_json::from_str(&content)?;
+        let keyjson= totaljson[key].clone();
+        content= keyjson.to_string();    
+    }
 
     // Replace " with \"
-    let replaced_content = content.replace("\"", "\\\"");
+    let mut replaced_content = content.replace("\"", "\\\"");
+    replaced_content = replaced_content.replace("\n", "");
 
     // Add double quotes at the beginning and end of the replaced content
     let final_content = format!("\"{}\"", replaced_content);

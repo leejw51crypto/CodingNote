@@ -1,0 +1,39 @@
+[
+    {
+        "Uint": {
+            "data": "100"
+        }
+    },
+    {
+        "Array": {
+            "data": [
+                {
+                    "Address": {
+                        "data": "0x112233445566778899aabbccddeeff0011223344"
+                    }
+                },
+                {
+                    "Address": {
+                        "data": "0x2233445566778899aabbccddeeff001122334455"
+                    }
+                },
+                {
+                    "Address": {
+                        "data": "0x33445566778899aabbccddeeff00112233445566"
+                    }
+                }
+            ]
+        }
+    },
+    {
+        "Address": {
+            "data": "0x445566778899aabbccddeeff0011223344556677"
+        }
+    },
+    {
+        "Uint": {
+            "data": "200"
+        }
+    }
+]
+
