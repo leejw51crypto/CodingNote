@@ -10,12 +10,26 @@ fn main() -> io::Result<()> {
     // Trim any leading or trailing whitespace or newline characters
     file_path = file_path.trim().to_string();
 
+    
     // Open the file
     let mut file = File::open(&file_path)?;
 
     // Read the file content into a string
     let mut content = String::new();
     file.read_to_string(&mut content)?;
+    
+    let mut key = String::new();
+    println!("Enter the key:");
+    io::stdin().read_line(&mut key)?;
+    key=key.trim().to_string();    
+    // if key is empty
+    if key.is_empty() {
+        println!("Key is empty");
+        return Ok(());
+    }
+    let totaljson:serde_json::Value=serde_json::from_str(&content)?;
+    let keyjson= totaljson[key].clone();
+    content= keyjson.to_string();    
 
     // Replace " with \"
     let replaced_content = content.replace("\"", "\\\"");
