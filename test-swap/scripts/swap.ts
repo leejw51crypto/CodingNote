@@ -12,6 +12,8 @@ const TO = config.networks.my.mycronosaddress;
 const SEND_AMOUNT = config.networks.my.mycroamount;
 
 export async function mainSwap(contractAddress: string | undefined) {
+  const endtime=Math.floor(Date.now() / 1000) + 60 * 20;
+  console.log("endtime=", endtime);
   const signers = await ethers.getSigners();
   const signer = signers[0];
   const mySwapContract = await ethers.getContractAt(
@@ -22,6 +24,7 @@ export async function mainSwap(contractAddress: string | undefined) {
 
   await approveWETH(signer, contractAddress);
   console.log('approved ------------------------');
+  //"swapExactETHForTokens(uint256,address[],address,uint256)": FunctionFragment;
   const tx = await mySwapContract.swapExactETHForTokens(
     ethers.utils.parseUnits('1', 'wei'),
     PATH,

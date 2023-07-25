@@ -4,6 +4,8 @@ all: prepare
 	npx hardhat run scripts/swap.ts --network my
 	npx hardhat run scripts/balance.ts --network my
 
+time:
+	npx hardhat run scripts/time.ts --network my
 prepare:
 	yarn
 ok:
