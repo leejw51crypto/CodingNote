@@ -4,7 +4,7 @@ import config from '../hardhat.config';
 
 
 async function main() {
-  console.log(Math.floor(Date.now() / 1000) + 60 * 20);
+  console.log(Math.floor(Date.now() / 1000) + 1000*365*60 * 24);
 }
 
 async function handleError(error: Error): Promise<void> {
