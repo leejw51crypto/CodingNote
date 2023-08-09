@@ -16,4 +16,5 @@ interface HelloWorld {
     }
 
     sayHello @0 (request: HelloRequest) -> (reply: HelloReply);
+    sayHello2 @1 (request: HelloRequest) -> (reply: HelloReply);
 }

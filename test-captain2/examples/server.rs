@@ -8,6 +8,7 @@ mod hello_capnp {
 use crate::hello_capnp::hello_world::Client;
 use crate::hello_capnp::hello_world::Server;
 use crate::hello_capnp::hello_world::{SayHelloParams, SayHelloResults};
+use crate::hello_capnp::hello_world::{SayHello2Params, SayHello2Results};
 use anyhow::Result;
 use futures::AsyncReadExt;
 use std::net::ToSocketAddrs;
@@ -18,6 +19,20 @@ impl Server for HelloWorldImpl {
         &mut self,
         params: SayHelloParams,
         mut results: SayHelloResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let request = pry!(pry!(params.get()).get_request());
+        let name = pry!(request.get_name());
+        let message = format!("Hello, {name}!");
+
+        results.get().init_reply().set_message(&message);
+
+        Promise::ok(())
+    }
+
+    fn say_hello2(
+        &mut self,
+        params: SayHello2Params,
+        mut results: SayHello2Results,
     ) -> Promise<(), ::capnp::Error> {
         let request = pry!(pry!(params.get()).get_request());
         let name = pry!(request.get_name());

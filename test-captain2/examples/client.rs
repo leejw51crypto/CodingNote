@@ -41,7 +41,7 @@ pub async fn main() -> Result<()> {
 
             tokio::task::spawn_local(rpc_system);
 
-            let mut request = hello_world.say_hello_request();
+            let mut request = hello_world.say_hello2_request();
             request.get().init_request().set_name(&msg);
 
             let reply = request.send().promise.await?;
