@@ -1,89 +1,51 @@
-// Copyright (c) 2013-2015 Sandstorm Development Group, Inc. and contributors
-// Licensed under the MIT License:
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-use capnp::capability::Promise;
-use capnp_rpc::{pry, rpc_twoparty_capnp, twoparty, RpcSystem};
-
 mod hello_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/hello_capnp.rs"));
 }
 
-use crate::hello_capnp::hello_world::Client;
-use crate::hello_capnp::hello_world::Server;
-use crate::hello_capnp::hello_world::{SayHelloParams, SayHelloResults};
+use anyhow::Result;
+use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use futures::AsyncReadExt;
 use std::net::ToSocketAddrs;
-struct HelloWorldImpl;
 
-impl Server for HelloWorldImpl {
-    fn say_hello(
-        &mut self,
-        params: SayHelloParams,
-        mut results: SayHelloResults,
-    ) -> Promise<(), ::capnp::Error> {
-        let request = pry!(pry!(params.get()).get_request());
-        let name = pry!(request.get_name());
-        let message = format!("Hello, {name}!");
+fn serialize_my_data() -> Vec<u8> {
+    let mut message = capnp::message::Builder::new_default();
+    {
+        let mut my_data = message.init_root::<hello_capnp::hello_world::my_data::Builder>();
+        my_data.set_name("John Doe");
+        my_data.set_age(30);
+        my_data.set_disk(&[0x01, 0x02, 0x03, 0x04]);
 
-        results.get().init_reply().set_message(&message);
+        let mut notes = my_data.init_mynotes(2);
+        notes.set(0, "Note 1");
+        notes.set(1, "Note 2");
+    }
 
-        Promise::ok(())
+    let mut serialized_data = Vec::new();
+    capnp::serialize::write_message(&mut serialized_data, &message).unwrap();
+
+    serialized_data
+}
+
+fn deserialize_my_data(data: &[u8]) {
+    let reader =
+        capnp::serialize::read_message(&mut &data[..], capnp::message::ReaderOptions::new())
+            .unwrap();
+    let my_data = reader
+        .get_root::<hello_capnp::hello_world::my_data::Reader>()
+        .unwrap();
+
+    println!("Name: {}", my_data.get_name().unwrap());
+    println!("Age: {}", my_data.get_age());
+    println!("Disk: {:?}", my_data.get_disk().unwrap());
+
+    for note in my_data.get_mynotes().unwrap().iter() {
+        println!("Note: {}", note.unwrap());
     }
 }
 
 #[tokio::main]
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = ::std::env::args().collect();
-    if args.len() != 2 {
-        println!("usage: {} server ADDRESS[:PORT]", args[0]);
-        return Ok(());
-    }
-
-    let addr = args[1]
-        .to_socket_addrs()?
-        .next()
-        .expect("could not parse address");
-
-    tokio::task::LocalSet::new()
-        .run_until(async move {
-            let listener = tokio::net::TcpListener::bind(&addr).await?;
-            let hello_world_client: Client = capnp_rpc::new_client(HelloWorldImpl);
-
-            loop {
-                let (stream, _) = listener.accept().await?;
-                stream.set_nodelay(true)?;
-                let (reader, writer) =
-                    tokio_util::compat::TokioAsyncReadCompatExt::compat(stream).split();
-                let network = twoparty::VatNetwork::new(
-                    reader,
-                    writer,
-                    rpc_twoparty_capnp::Side::Server,
-                    Default::default(),
-                );
-
-                let rpc_system =
-                    RpcSystem::new(Box::new(network), Some(hello_world_client.clone().client));
-
-                tokio::task::spawn_local(rpc_system);
-            }
-        })
-        .await
+pub async fn main() -> Result<()> {
+    let serialized_data = serialize_my_data();
+    deserialize_my_data(&serialized_data);
+    Ok(())
 }
