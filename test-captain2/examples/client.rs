@@ -1,16 +1,15 @@
-
 mod hello_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/hello_capnp.rs"));
 }
 
-
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use std::net::ToSocketAddrs;
 
+use anyhow::Result;
 use futures::AsyncReadExt;
 
 #[tokio::main]
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn main() -> Result<()> {
     let args: Vec<String> = ::std::env::args().collect();
     if args.len() != 3 {
         println!("usage: {} client HOST:PORT MESSAGE", args[0]);

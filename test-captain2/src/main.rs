@@ -26,13 +26,11 @@ mod hello_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/hello_capnp.rs"));
 }
 
-
-
 use crate::hello_capnp::hello_world::Client;
+use crate::hello_capnp::hello_world::Server;
+use crate::hello_capnp::hello_world::{SayHelloParams, SayHelloResults};
 use futures::AsyncReadExt;
 use std::net::ToSocketAddrs;
-use crate::hello_capnp::hello_world::{SayHelloParams,SayHelloResults};
-use crate::hello_capnp::hello_world::Server;
 struct HelloWorldImpl;
 
 impl Server for HelloWorldImpl {

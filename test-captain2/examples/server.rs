@@ -5,13 +5,12 @@ mod hello_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/hello_capnp.rs"));
 }
 
-
-
 use crate::hello_capnp::hello_world::Client;
+use crate::hello_capnp::hello_world::Server;
+use crate::hello_capnp::hello_world::{SayHelloParams, SayHelloResults};
+use anyhow::Result;
 use futures::AsyncReadExt;
 use std::net::ToSocketAddrs;
-use crate::hello_capnp::hello_world::{SayHelloParams,SayHelloResults};
-use crate::hello_capnp::hello_world::Server;
 struct HelloWorldImpl;
 
 impl Server for HelloWorldImpl {
@@ -31,7 +30,7 @@ impl Server for HelloWorldImpl {
 }
 
 #[tokio::main]
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn main() -> Result<()> {
     let args: Vec<String> = ::std::env::args().collect();
     if args.len() != 2 {
         println!("usage: {} server ADDRESS[:PORT]", args[0]);

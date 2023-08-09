@@ -1,15 +1,11 @@
-
 mod hello_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/hello_capnp.rs"));
 }
 
-
-use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
-use std::net::ToSocketAddrs;
 use anyhow::Result;
+use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use futures::AsyncReadExt;
-
-
+use std::net::ToSocketAddrs;
 
 fn serialize_my_data() -> Vec<u8> {
     let mut message = capnp::message::Builder::new_default();
@@ -31,8 +27,12 @@ fn serialize_my_data() -> Vec<u8> {
 }
 
 fn deserialize_my_data(data: &[u8]) {
-    let reader = capnp::serialize::read_message(&mut &data[..], capnp::message::ReaderOptions::new()).unwrap();
-    let my_data = reader.get_root::<hello_capnp::hello_world::my_data::Reader>().unwrap();
+    let reader =
+        capnp::serialize::read_message(&mut &data[..], capnp::message::ReaderOptions::new())
+            .unwrap();
+    let my_data = reader
+        .get_root::<hello_capnp::hello_world::my_data::Reader>()
+        .unwrap();
 
     println!("Name: {}", my_data.get_name().unwrap());
     println!("Age: {}", my_data.get_age());
@@ -43,10 +43,9 @@ fn deserialize_my_data(data: &[u8]) {
     }
 }
 
-
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let  serialized_data = serialize_my_data();
+    let serialized_data = serialize_my_data();
     deserialize_my_data(&serialized_data);
     Ok(())
 }
