@@ -6,3 +6,6 @@ server:
 	
 client:
 	cargo run --example client 127.0.0.1:8080 ok
+
+play:
+	cargo run --example play
