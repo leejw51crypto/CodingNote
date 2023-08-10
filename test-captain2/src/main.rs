@@ -3,11 +3,8 @@ mod hello_capnp {
 }
 
 use anyhow::Result;
-use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
-use futures::AsyncReadExt;
-use std::net::ToSocketAddrs;
 
-fn serialize_my_data() -> Vec<u8> {
+fn serialize_my_data() -> Result<Vec<u8>> {
     let mut message = capnp::message::Builder::new_default();
     {
         let mut my_data = message.init_root::<hello_capnp::hello_world::my_data::Builder>();
@@ -21,31 +18,36 @@ fn serialize_my_data() -> Vec<u8> {
     }
 
     let mut serialized_data = Vec::new();
-    capnp::serialize::write_message(&mut serialized_data, &message).unwrap();
+    capnp::serialize::write_message(&mut serialized_data, &message)?;
 
-    serialized_data
+    Ok(serialized_data)
 }
 
-fn deserialize_my_data(data: &[u8]) {
+fn deserialize_my_data(data: &[u8]) -> Result<()> {
     let reader =
         capnp::serialize::read_message(&mut &data[..], capnp::message::ReaderOptions::new())
-            .unwrap();
+            ?;
     let my_data = reader
         .get_root::<hello_capnp::hello_world::my_data::Reader>()
-        .unwrap();
+        ?;
 
-    println!("Name: {}", my_data.get_name().unwrap());
+    println!("Name: {}", my_data.get_name()?);
     println!("Age: {}", my_data.get_age());
-    println!("Disk: {:?}", my_data.get_disk().unwrap());
+    println!("Disk: {:?}", my_data.get_disk()?);
 
-    for note in my_data.get_mynotes().unwrap().iter() {
-        println!("Note: {}", note.unwrap());
+    for note in my_data.get_mynotes()?.iter() {
+        println!("Note: {}", note?);
     }
+    Ok(())
 }
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let serialized_data = serialize_my_data();
-    deserialize_my_data(&serialized_data);
+    let serialized_data = serialize_my_data()?;
+    // show hex of serialized data and length
+    println!("serialized_data length: {}", serialized_data.len());
+    println!("serialized_data: {}", hex::encode(&serialized_data));
+    
+    deserialize_my_data(&serialized_data)?;
     Ok(())
 }
