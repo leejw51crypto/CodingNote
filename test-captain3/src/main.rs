@@ -68,7 +68,6 @@ fn write() -> Result<Vec<u8>> {
     Ok(out)
 }
 
-
 fn read(input: &[u8]) -> Result<()> {
     let mut reader = read_message(&mut std::io::Cursor::new(input), ReaderOptions::new())?;
     let blockchain = reader.get_root::<blockchain_capnp::blockchain::Reader>()?;
@@ -100,10 +99,43 @@ fn read(input: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn main2() -> Result<()> {
     let out = write()?;
     println!("Serialized data: {}", hex::encode(&out));
 
     read(&out)?;
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    let mut out = Vec::new();
+    {
+        let mut message = message::Builder::new_default();
+        let mut tx = message.init_root::<blockchain_capnp::transaction::Builder>();
+        tx.set_sender("Alice");
+        tx.set_recipient("Bob");
+        tx.set_amount(100);
+
+        write_message(&mut out, &message)?;
+        println!("TX Serialized data: {}", hex::encode(&out));
+    }
+
+    {
+        let reader = read_message(&mut std::io::Cursor::new(&out), ReaderOptions::new())?;
+        let tx = reader.get_root::<blockchain_capnp::transaction::Reader>()?;
+        println!(
+            "TX: Sender: {}, Recipient: {}, Amount: {}",
+            tx.get_sender()?,
+            tx.get_recipient()?,
+            tx.get_amount()
+        );
+    }
+
+    {
+        let reader = read_message(&mut std::io::Cursor::new(&out), ReaderOptions::new())?;
+        let tx = reader.get_root::<blockchain_capnp::transaction::Reader>()?;
+        let amount = tx.get_amount();
+        println!("tx amount: {}", amount);
+    }
     Ok(())
 }
