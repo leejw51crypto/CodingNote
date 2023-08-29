@@ -37,11 +37,12 @@ fn serialize_block(
     write_message(&mut block_out, &messageblock)?;
     Ok(block_out)
 }
-
 fn write() -> Result<Vec<u8>> {
     let mut message = message::Builder::new_default();
     let mut blockchain = message.init_root::<blockchain_capnp::blockchain::Builder>();
-    let mut finalblocks = blockchain.init_blocks(1);
+    let mut finalblocks = blockchain.init_blocks(3);
+
+    // first block
     let mut finalblock = finalblocks.reborrow().get(0);
 
     let messageblock = create_block();
@@ -51,15 +52,29 @@ fn write() -> Result<Vec<u8>> {
     finalblock.set_hash(&hash);
     finalblock.set_block(&block_out);
 
+    // second block
+    let mut finalblock = finalblocks.reborrow().get(1);
+    let hash = sha2::Sha256::digest(&block_out);
+    finalblock.set_hash(&hash);
+    finalblock.set_block(&block_out);
+
+    let mut finalblock = finalblocks.reborrow().get(2);
+    let hash = sha2::Sha256::digest(&block_out);
+    finalblock.set_hash(&hash);
+    finalblock.set_block(&block_out);
+
     let mut out = Vec::new();
     write_message(&mut out, &message)?;
     Ok(out)
 }
 
+
 fn read(input: &[u8]) -> Result<()> {
     let mut reader = read_message(&mut std::io::Cursor::new(input), ReaderOptions::new())?;
     let blockchain = reader.get_root::<blockchain_capnp::blockchain::Reader>()?;
 
+    // show block count
+    println!("Block Count: {}", blockchain.get_blocks()?.len());
     for block2 in blockchain.get_blocks()?.iter() {
         let hash = block2.get_hash()?;
         println!("Hash: {:?}", hash);
@@ -71,7 +86,7 @@ fn read(input: &[u8]) -> Result<()> {
 
         println!("Timestamp: {}", block.get_timestamp());
         println!("Prev Hash: {:?}", block.get_prev_hash()?);
-
+        println!("Transactions: Count {}", block.get_transactions()?.len());
         for transaction in block.get_transactions()?.iter() {
             println!(
                 "Transaction - Sender: {}, Recipient: {}, Amount: {}",
