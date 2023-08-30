@@ -18,12 +18,17 @@ def get_embedding(text):
 # Numerical text
 num_text1 = "block 12345"
 num_text2 = "block 12346"
-num_text3 = "block 12343"
+num_text3 = "block 12300"
 
 # Get the embeddings
 embedding1 = get_embedding(num_text1)
 embedding2 = get_embedding(num_text2)
 embedding3 = get_embedding(num_text3)
+
+# print sizeof embedding1
+print(len(embedding1))
+print(len(embedding2))
+print(len(embedding3))
 
 # Compute cosine similarity
 cosine_similarity = 1 - cosine(embedding1.cpu().numpy(), embedding2.cpu().numpy())

@@ -16,7 +16,7 @@ embedding2 = model.encode(num_text)
 print(len(embedding2))
 
 
-num_text = "block 12343"
+num_text = "block 12300"
 # Encode the numerical text to get the embeddings
 embedding3 = model.encode(num_text)
 print(len(embedding2))
