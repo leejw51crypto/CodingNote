@@ -1,4 +1,4 @@
-mod common;
+use test_fastserver::common;
 
 use std::{
     ascii, fs, io,

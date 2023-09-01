@@ -6,3 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.75"
+clap = { version = "4.4.2", features = ["derive", "debug"] }
+directories-next = "2.0.0"
+quinn = "0.10.2"
+rcgen = "0.11.1"
+rustls = "0.21.7"
+rustls-pemfile = "1.0.3"
+tokio = { version = "1.32.0", features = ["full"] }
+tracing = "0.1.37"
+tracing-futures = "0.2.5"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+url = "2.4.1"
