@@ -31,7 +31,7 @@ struct Opt {
     #[clap(long = "stateless-retry")]
     stateless_retry: bool,
     /// Address to listen on
-    #[clap(long = "listen", default_value = "[::1]:4433")]
+    #[clap(long = "listen", default_value = "[::]:4433")]
     listen: SocketAddr,
 }
 
