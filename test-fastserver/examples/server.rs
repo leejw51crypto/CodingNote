@@ -13,6 +13,8 @@ use clap::Parser;
 use tracing::{error, info, info_span};
 use tracing_futures::Instrument as _;
 
+use test_fastserver::hello_generated::*;
+
 #[derive(Parser, Debug)]
 #[clap(name = "server")]
 struct Opt {
@@ -232,6 +234,7 @@ async fn handle_request(
     Ok(())
 }
 
+
 fn process_get(root: &Path, x: &[u8]) -> Result<Vec<u8>> {
     if x.len() < 4 || &x[0..4] != b"GET " {
         bail!("missing GET");
@@ -261,6 +264,26 @@ fn process_get(root: &Path, x: &[u8]) -> Result<Vec<u8>> {
             }
         }
     }
-    let data = fs::read(&real_path).context("failed reading file")?;
-    Ok(data)
+   let data = fs::read(&real_path).context("failed reading file")?;
+
+   let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
+
+   let name = builder.create_string("Hello, World!");
+
+   let data = builder.create_vector(&data);
+
+   let hello_world = HelloWorld::create(
+       &mut builder,
+       &HelloWorldArgs {
+           name: Some(name),
+           data: Some(data),
+       },
+   );
+
+   builder.finish(hello_world, None);
+
+   let buf = builder.finished_data();
+
+
+    Ok(buf.to_vec())
 }

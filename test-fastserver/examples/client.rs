@@ -13,7 +13,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use tracing::{error, info};
 use url::Url;
-
+use test_fastserver::hello_generated::*;
 /// HTTP/0.9 over QUIC client
 #[derive(Parser, Debug)]
 #[clap(name = "client")]
@@ -139,7 +139,16 @@ async fn run(options: Opt) -> Result<()> {
         duration,
         resp.len() as f32 / (duration_secs(&duration) * 1024.0)
     );
-    io::stdout().write_all(&resp).unwrap();
+    //io::stdout().write_all(&resp).unwrap();
+    let hello_world = flatbuffers::root::<HelloWorld>(&resp).unwrap();
+    println!("deserialized {:?}", hello_world);
+
+    println!("name:{}", hello_world.name().unwrap());
+    let data = hello_world.data().unwrap().bytes().to_vec();
+    println!("data:{}", String::from_utf8(data).unwrap());
+
+
+
     io::stdout().flush().unwrap();
     conn.close(0u32.into(), b"done");
 
