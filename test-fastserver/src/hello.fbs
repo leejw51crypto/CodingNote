@@ -1,7 +1,6 @@
-namespace HelloWorld;
-
-table Hello {
-    message:string;
+table HelloWorld {
+    name: string;
+    data: [ubyte];
 }
 
-root_type Hello;
+root_type HelloWorld;

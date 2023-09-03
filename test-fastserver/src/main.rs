@@ -1,28 +1,41 @@
 mod hello_generated;
 
-use flatbuffers::FlatBufferBuilder;
-use hello_generated::hello_world::Hello;
-use hello_generated::hello_world::root_as_hello;
-use hello_generated::hello_world::HelloArgs;
-use anyhow::Result;
 use anyhow::anyhow;
-fn main()->Result<()>{
-    let message = "Hello, World!";
-    
-    // Serialize the message
-    let mut builder = FlatBufferBuilder::with_capacity(1024);
-    let message_offset = builder.create_string(message);
-    let hello = Hello::create(&mut builder, &HelloArgs { message: Some(message_offset) });
-    builder.finish(hello, None);
+use anyhow::Result;
+use flatbuffers::FlatBufferBuilder;
+extern crate flatbuffers;
 
-    let buf = builder.finished_data(); // Serialized data
+use flatbuffers::WIPOffset;
+use hello_generated::*;
 
-    // Deserialize the message
-    let hello = root_as_hello(buf)?;
-    let deserialized_message = hello.message().ok_or(anyhow!("Message not found"))?;
-    
-    
-    
-    println!("{}", deserialized_message);
-    Ok(())
+use hello_generated::HelloWorld;
+use hello_generated::HelloWorldArgs;
+
+fn main() {
+    let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
+
+    let name = builder.create_string("Hello, World!");
+
+    let data = builder.create_vector(&[1u8, 2, 3, 4, 5]);
+
+    let hello_world = HelloWorld::create(
+        &mut builder,
+        &HelloWorldArgs {
+            name: Some(name),
+            data: Some(data),
+        },
+    );
+
+    builder.finish(hello_world, None);
+
+    let buf = builder.finished_data();
+
+    println!("serialized {}", hex::encode(buf));
+
+    // Deserialization
+    let hello_world = flatbuffers::root::<HelloWorld>(buf).unwrap();
+    println!("deserialized {:?}", hello_world);
+
+    assert_eq!(hello_world.name().unwrap(), "Hello, World!");
+    assert_eq!(hello_world.data().unwrap().bytes(), &[1, 2, 3, 4, 5]);
 }
