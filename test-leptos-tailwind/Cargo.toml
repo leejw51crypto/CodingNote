@@ -10,10 +10,10 @@ crate-type = ["cdylib", "rlib"]
 
 
 [dependencies]
-leptos = { path = "../../leptos", features = ["nightly"] }
-leptos_actix = { path = "../../integrations/actix", optional = true }
-leptos_meta = { path = "../../meta", features = ["nightly"] }
-leptos_router = { path = "../../router", features = ["nightly"] }
+leptos = {git = "https://github.com/leptos-rs/leptos.git" ,package = "leptos",features = ["nightly"] }
+leptos_actix = {git = "https://github.com/leptos-rs/leptos.git", package = "leptos_actix", optional = true }
+leptos_meta = { git = "https://github.com/leptos-rs/leptos.git",package = "leptos_meta", features = ["nightly"] }
+leptos_router = { git = "https://github.com/leptos-rs/leptos.git",package = "leptos_router", features = ["nightly"] }
 gloo-net = { version = "0.2", features = ["http"] }
 log = "0.4"
 cfg-if = "1.0"
