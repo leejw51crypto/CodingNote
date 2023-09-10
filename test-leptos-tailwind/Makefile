@@ -1,0 +1,2 @@
+all:
+	cargo leptos watch
