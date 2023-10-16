@@ -9,6 +9,7 @@ build:
 
 nodejs:
 	wasm-pack build --target nodejs
-	
+	node node.js
+
 web:
 	cd ./dist && python3 -m http.server
