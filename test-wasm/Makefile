@@ -13,3 +13,6 @@ nodejs:
 
 web:
 	cd ./dist && python3 -m http.server
+
+install:
+	cargo install wasm-bindgen-cli
