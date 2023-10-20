@@ -1,20 +1,23 @@
 import torch
 import numpy as np
-from transformers import BertTokenizer, BertModel
+from transformers import GPT2Tokenizer, GPT2Model
 
 # Load tokenizer and model
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained('bert-base-uncased')
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2-medium')
+model = GPT2Model.from_pretrained('gpt2-medium')
+# Set the padding token
+tokenizer.pad_token = tokenizer.eos_token
+
 
 def get_embedding(sentence):
     """
-    Generate embeddings for a given sentence using the BERT model.
+    Generate embeddings for a given sentence using the GPT-2 model.
     
     Args:
     - sentence (str): The input sentence for which to get the embeddings.
     
     Returns:
-    - numpy.array: The embeddings for each token in the sentence (excluding [CLS] and [SEP] tokens).
+    - numpy.array: The embeddings for each token in the sentence.
     """
     
     # Tokenize and encode the sentence
@@ -25,8 +28,7 @@ def get_embedding(sentence):
         outputs = model(**inputs)
         embeddings = outputs.last_hidden_state
 
-    # Get embeddings for each token, ignoring [CLS] and [SEP]
-    return embeddings[0, 1:-1].numpy()
+    return embeddings[0].numpy()
 
 # Given sequence
 sequence = ["Hello", "how", "are", "you", "?"]
@@ -38,9 +40,11 @@ print(f"Sequece embedding shape: {sequence_embedding.shape}")
 
 # Given batch of sequences
 batch = [
-    ["Hello", "how", "are", "you", "?"],
-    ["I'm", "fine", "thank", "you", "."],
-    ["What", "is", "your", "name", "?"]
+    ["Hello"],
+    ["Hello", "how"],
+    ["Hello", "how", "are"],    
+    ["Hello", "how", "are", "you"],
+    ["Hello", "how", "are", "you", "?"],    
 ]
 
 print(f"Batch :{batch}")
@@ -50,7 +54,6 @@ for seq in batch:
     
 # Get embeddings for each sequence in the batch
 batch_embeddings = [get_embedding(' '.join(seq)) for seq in batch]
-
 
 # Find max length among all embeddings to use for padding
 max_length = max(embedding.shape[0] for embedding in batch_embeddings)
