@@ -215,8 +215,7 @@ trainer.model.save_pretrained(new_model)
 logging.set_verbosity(logging.CRITICAL)
 
 # Run text generation pipeline with our next model
-#prompt = "What is a large language model?"
-prompt="where is hongkong?"
+prompt = "What is a large language model?"
 pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=200)
 result = pipe(f"<s>[INST] {prompt} [/INST]")
 print(result[0]['generated_text'])
@@ -258,7 +257,7 @@ loaded_tokenizer = AutoTokenizer.from_pretrained('./saved_model_directory')
 
 from transformers import pipeline
 generator = pipeline('text-generation', model=loaded_model, tokenizer=loaded_tokenizer)
-prompt = "where is hongkong?"
+prompt = "What is a large language model?"
 generated_text = generator(prompt, max_length=100, do_sample=True, top_k=50)[0]['generated_text']
 
 print(generated_text)
