@@ -150,8 +150,9 @@ while True:
     prompt = input()
     if "quit" in prompt:
         break    
-    generated_text = generator(prompt, max_length=100, do_sample=True, top_k=50)[0]['generated_text']
-    print(generated_text)
+    with torch.no_grad():
+        generated_text = generator(prompt, max_length=100, do_sample=True, top_k=50)[0]['generated_text']
+        print(generated_text)
 
 
 
