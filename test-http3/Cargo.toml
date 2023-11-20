@@ -1,0 +1,33 @@
+[package]
+name = "test-http3"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+capnp = "0.18"
+hex= "0.4"
+anyhow = "1.0"
+quinn = {version="0.10", features = ["tls-rustls"]}
+async-io = { version = "1.6", optional = true }
+async-std = { version = "1.11", optional = true }
+bytes = "1"
+futures-io = { version = "0.3.19", optional = true }
+rustc-hash = "1.1"
+pin-project-lite = "0.2"
+rustls = { version = "0.21.0" }
+thiserror = "1.0.21"
+tracing = "0.1.10"
+tokio = { version = "1.28.1", features = ["full"] }
+webpki = { version = "0.22", default-features = false, optional = true }
+clap = { version = "3.2", features = ["derive"] }
+crc = "3"
+bencher = "0.1.5"
+directories-next = "2"
+rand = "0.8"
+rcgen = "0.10.0"
+rustls-pemfile = "1.0.0"
+tracing-subscriber = { version = "0.3.0", default-features = false, features = ["env-filter", "fmt", "ansi", "time", "local-time"] }
+tracing-futures = { version = "0.2.0", default-features = false, features = ["std-future"] }
+url = "2"
