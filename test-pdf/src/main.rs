@@ -1,12 +1,12 @@
 use anyhow::Result;
-use walkdir::{WalkDir, DirEntry};
+use genpdf::Element;
 use regex::Regex;
 use std::collections::HashSet;
-use genpdf::Element;
 use std::fs;
 use std::io;
 use std::io::Read;
 use std::path::Path;
+use walkdir::{DirEntry, WalkDir};
 fn main() -> Result<()> {
     // Load a font from the file system
     let font_family =
@@ -33,31 +33,36 @@ fn main() -> Result<()> {
 
     // Add contents of each text file to the PDF
     for file in text_files {
-        let filepath = file.path().display().to_string();   
+        let filepath = file.path().display().to_string();
         let filename = file.file_name().to_string_lossy().to_string();
         let mut file_content = String::new();
 
         let mut style = genpdf::style::Style::new();
-        style.set_font_size(18);
+        style.set_font_size(10);
         style.set_bold();
 
-        
         fs::File::open(file.path())
             .expect("Failed to open file")
             .read_to_string(&mut file_content)
             .expect("Failed to read file content");
 
-            doc.push(genpdf::elements::Paragraph::new(&filepath)
-            .styled(style)); // Example style
+        doc.push(genpdf::elements::Paragraph::new("\r"));
+        doc.push(genpdf::elements::Paragraph::new("\r"));
+        doc.push(genpdf::elements::Paragraph::new(&filepath).styled(style)); // Example style
+        doc.push(genpdf::elements::Paragraph::new("\r"));
 
         //println!("File: {}\n{}", filename, file_content);
         // Split the text into sentences
         let sentences = split_into_sentences(&file_content);
 
         // Add each sentence as a paragraph to the PDF
+        let mut style = genpdf::style::Style::new();
+        style.set_font_size(4);
+        style.set_bold();
+
         for sentence in sentences {
-          //doc.push(genpdf::elements::Paragraph::new(sentence));
-          doc.push(genpdf::elements::Paragraph::new(format!("@{}#", sentence)));
+            doc.push(genpdf::elements::Paragraph::new(format!("{}", sentence)).styled(style));
+            // Example style
         }
 
         // Add filename and content to the document
@@ -75,17 +80,19 @@ fn repeat_text(text: &str, count: usize) -> String {
 
 fn split_into_sentences(text: &str) -> Vec<String> {
     text.split(|c| c == '\n' || c == '\r')
-        .map(|sentence| sentence.replace("\n", "").replace("\r", "").trim().to_string())
+        .map(|sentence| {
+            sentence
+                .replace("\n", "")
+                .replace("\r", "")
+                .trim()
+                .to_string()
+        })
         .filter(|sentence| !sentence.is_empty())
         .collect()
 }
 
-
-
 fn read_data_folder(path: &str) -> Result<Vec<DirEntry>> {
-    let allowed_extensions: HashSet<_> = vec!["txt", "proto", "rs", "go"]
-        .into_iter()
-        .collect();
+    let allowed_extensions: HashSet<_> = vec!["txt", "proto", "rs", "go"].into_iter().collect();
 
     println!("Reading data folder: {}", path);
 
@@ -94,7 +101,9 @@ fn read_data_folder(path: &str) -> Result<Vec<DirEntry>> {
         .filter_map(|e| e.ok())
         .filter_map(|entry| {
             if entry.file_type().is_file() {
-                entry.path().extension()
+                entry
+                    .path()
+                    .extension()
                     .and_then(std::ffi::OsStr::to_str)
                     .map(|ext| allowed_extensions.contains(ext))
                     .and_then(|is_allowed| if is_allowed { Some(entry) } else { None })
