@@ -6,8 +6,7 @@ use std::io::Read;
 use walkdir::{DirEntry, WalkDir};
 fn main() -> Result<()> {
     // Load a font from the file system
-    let font_family =
-        genpdf::fonts::from_files("./data", "Ubuntu", None).expect("Failed to load font family");
+    let font_family = genpdf::fonts::from_files("./data", "Ubuntu", None)?;
 
     // Create a document and set the default font family
     let mut doc = genpdf::Document::new(font_family);
@@ -37,18 +36,13 @@ fn main() -> Result<()> {
         style.set_font_size(8);
         style.set_bold();
 
-        fs::File::open(file.path())
-            .expect("Failed to open file")
-            .read_to_string(&mut file_content)
-            .expect("Failed to read file content");
+        fs::File::open(file.path())?.read_to_string(&mut file_content)?;
 
         doc.push(genpdf::elements::Paragraph::new("\r"));
         doc.push(genpdf::elements::Paragraph::new("\r"));
         doc.push(genpdf::elements::Paragraph::new(&filepath).styled(style)); // Example style
         doc.push(genpdf::elements::Paragraph::new("\r"));
 
-        //println!("File: {}\n{}", filename, file_content);
-        // Split the text into sentences
         let sentences = split_into_sentences(&file_content);
 
         // Add each sentence as a paragraph to the PDF
@@ -59,9 +53,6 @@ fn main() -> Result<()> {
         for sentence in sentences {
             doc.push(genpdf::elements::Paragraph::new(sentence.to_string()).styled(style));
         }
-
-        // Add filename and content to the document
-        //doc.push(genpdf::elements::Paragraph::new(format!("File: {}\n{}", filename, file_content)));
     }
     // Render the document and write it to a file
     doc.render_to_file("output.pdf")?;
