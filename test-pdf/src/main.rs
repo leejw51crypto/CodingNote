@@ -17,7 +17,7 @@ fn main() -> Result<()> {
 
     // Customize the pages
     let mut decorator = genpdf::SimplePageDecorator::new();
-    decorator.set_margins(10);
+    decorator.set_margins(4);
     doc.set_page_decorator(decorator);
 
     // Fetch text files from the data folder "mydocument"
@@ -34,7 +34,7 @@ fn main() -> Result<()> {
         let mut file_content = String::new();
 
         let mut style = genpdf::style::Style::new();
-        style.set_font_size(10);
+        style.set_font_size(8);
         style.set_bold();
 
         fs::File::open(file.path())
@@ -76,7 +76,9 @@ fn split_into_sentences(text: &str) -> Vec<String> {
 }
 
 fn read_data_folder(path: &str) -> Result<Vec<DirEntry>> {
-    let allowed_extensions: HashSet<_> = vec!["txt", "proto", "rs", "go"].into_iter().collect();
+    let allowed_extensions: HashSet<_> = vec!["txt", "proto", "rs", "go", "md", "c", "cpp", "cxx"]
+        .into_iter()
+        .collect();
 
     println!("Reading data folder: {}", path);
 
