@@ -1,11 +1,8 @@
 use anyhow::Result;
 use genpdf::Element;
-use regex::Regex;
 use std::collections::HashSet;
 use std::fs;
-use std::io;
 use std::io::Read;
-use std::path::Path;
 use walkdir::{DirEntry, WalkDir};
 fn main() -> Result<()> {
     // Load a font from the file system
@@ -34,7 +31,6 @@ fn main() -> Result<()> {
     // Add contents of each text file to the PDF
     for file in text_files {
         let filepath = file.path().display().to_string();
-        let filename = file.file_name().to_string_lossy().to_string();
         let mut file_content = String::new();
 
         let mut style = genpdf::style::Style::new();
@@ -61,8 +57,7 @@ fn main() -> Result<()> {
         style.set_bold();
 
         for sentence in sentences {
-            doc.push(genpdf::elements::Paragraph::new(format!("{}", sentence)).styled(style));
-            // Example style
+            doc.push(genpdf::elements::Paragraph::new(sentence.to_string()).styled(style));
         }
 
         // Add filename and content to the document
@@ -73,20 +68,9 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// Function to repeat a text multiple times with a newline
-fn repeat_text(text: &str, count: usize) -> String {
-    (0..count).map(|_| text).collect()
-}
-
 fn split_into_sentences(text: &str) -> Vec<String> {
     text.split(|c| c == '\n' || c == '\r')
-        .map(|sentence| {
-            sentence
-                .replace("\n", "")
-                .replace("\r", "")
-                .trim()
-                .to_string()
-        })
+        .map(|sentence| sentence.replace(['\n', '\r'], "").trim().to_string())
         .filter(|sentence| !sentence.is_empty())
         .collect()
 }
