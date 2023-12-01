@@ -1,9 +1,9 @@
 use anyhow::Result;
+use walkdir::{WalkDir, DirEntry};
 use regex::Regex;
 use std::collections::HashSet;
 use genpdf::Element;
 use std::fs;
-use std::fs::DirEntry;
 use std::io;
 use std::io::Read;
 use std::path::Path;
@@ -81,19 +81,26 @@ fn split_into_sentences(text: &str) -> Vec<String> {
 }
 
 
+
 fn read_data_folder(path: &str) -> Result<Vec<DirEntry>> {
     let allowed_extensions: HashSet<_> = vec!["txt", "proto", "rs", "go"]
         .into_iter()
         .collect();
 
     println!("Reading data folder: {}", path);
-    let entries = fs::read_dir(Path::new(path))?
-        .filter_map(Result::ok) // Convert to Option and filter out Err values
-        .filter(|entry| {
-            entry.path().extension()
-                .and_then(std::ffi::OsStr::to_str)
-                .map(|ext| allowed_extensions.contains(ext))
-                .unwrap_or(false)
+
+    let entries = WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter_map(|entry| {
+            if entry.file_type().is_file() {
+                entry.path().extension()
+                    .and_then(std::ffi::OsStr::to_str)
+                    .map(|ext| allowed_extensions.contains(ext))
+                    .and_then(|is_allowed| if is_allowed { Some(entry) } else { None })
+            } else {
+                None
+            }
         })
         .collect::<Vec<DirEntry>>();
 
