@@ -14,6 +14,11 @@ struct Address {
 
 struct Person {
     name @0 :Text;
-    age @1 :UInt8;
+    age @1 : Int32;
     address @2 :Address;
+    photo @3: Data;
+}
+
+struct People {
+    persons @0 :List(Person);
 }

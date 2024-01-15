@@ -1,13 +1,21 @@
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, Result};
+use capnp::message::Builder;
+use fake::faker::address::raw::*;
+use fake::faker::name::raw::*;
+use fake::locales::*;
+use fake::Fake;
 use futures::future;
 use h3_quinn::quinn;
+use hello_capnp::{people, person};
 use quinn::Endpoint;
+use rand::Rng;
 use rustls::RootCertStore;
 use structopt::StructOpt;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info};
+
 static ALPN: &[u8] = b"h3";
 pub mod hello_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/hello_capnp.rs"));
@@ -155,7 +163,6 @@ impl H3Client {
     }
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -165,43 +172,73 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
     let datatosend = writecapnp()?;
-    let ret=H3Client::perform_http_request("/hello", &datatosend).await?.to_vec();
+    let ret = H3Client::perform_http_request("/hello", &datatosend)
+        .await?
+        .to_vec();
     readcapnp(&ret)?;
     Ok(())
 }
 
-
-fn writecapnp() -> Result<Vec<u8>> {
-    // Serialize
-    let mut message = capnp::message::Builder::new_default();
+fn writecapnp() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut message = Builder::new_default();
     {
-        let mut person = message.init_root::<hello_capnp::person::Builder>();
-        person.set_name("John Doe");
-        person.set_age(30);
+        let mut people = message.init_root::<people::Builder>();
 
-        let mut address = person.init_address();
-        address.set_street("123 Main St");
-        address.set_city("Anytown");
-        address.set_zip("12345");
+        // Generate a random number of persons
+        let num_persons = rand::thread_rng().gen_range(1900..20000);
+        let mut persons = people.reborrow().init_persons(num_persons as u32);
+
+        for i in 0..num_persons {
+            let mut person = persons.reborrow().get(i as u32);
+
+            let name: String = Name(EN).fake();
+            let myaddress: String = SecondaryAddress(EN).fake();
+            let mycity: String = CityName(EN).fake();
+            let mypostcode: String = PostCode(EN).fake();
+            let age = rand::thread_rng().gen_range(0..100) as i32;
+
+            person.set_name(&name);
+            person.set_age(age);
+            // make empty byte array of 100,000 bytes
+            let photobytes: Vec<u8> = vec![0; 1000];
+            person.set_photo(&photobytes);
+
+            let mut address = person.init_address();
+            address.set_street(&myaddress);
+            address.set_city(&mycity);
+            address.set_zip(&mypostcode);
+        }
     }
+
     let mut output = Vec::new();
     capnp::serialize::write_message(&mut output, &message)?;
 
     Ok(output)
 }
 
-fn readcapnp(output: &[u8]) -> Result<()> {
-    println!("deserialize {} bytes", output.len());
+fn show_person(person: person::Reader) -> Result<(), capnp::Error> {
+    println!("Name: {}", person.get_name()?);
+    println!("Age: {}", person.get_age());
+    if let Ok(address) = person.get_address() {
+        println!("Street: {}", address.get_street()?);
+        println!("City: {}", address.get_city()?);
+        println!("ZIP: {}", address.get_zip()?);
+    }
+    Ok(())
+}
+
+fn readcapnp(output: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let message_reader =
         capnp::serialize::read_message(&mut &output[..], capnp::message::ReaderOptions::new())?;
-    let person_reader = message_reader.get_root::<hello_capnp::person::Reader>()?;
+    let people_reader = message_reader.get_root::<people::Reader>()?;
+    let persons = people_reader.get_persons()?;
+    let num_persons = persons.len();
 
-    println!("Name: {}", person_reader.get_name().unwrap());
-    println!("Age: {}", person_reader.get_age());
+    show_person(persons.get(0))?;
+    println!("-------------------");
+    show_person(persons.get(num_persons - 1))?;
+    println!("Number of persons: {}", people_reader.get_persons()?.len());
+    println!("deserialize {} bytes", output.len());
 
-    let address_reader = person_reader.get_address().unwrap();
-    println!("Street: {}", address_reader.get_street().unwrap());
-    println!("City: {}", address_reader.get_city().unwrap());
-    println!("ZIP: {}", address_reader.get_zip().unwrap());
     Ok(())
 }

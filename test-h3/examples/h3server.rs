@@ -192,7 +192,6 @@ impl H3Server {
         Ok(())
     }
 
-
     async fn dispatch_message(userpath: &str, requestdata: &[u8]) -> Result<Vec<u8>> {
         let responsebytes: Vec<u8> = requestdata.to_vec();
         if userpath == "/hello" {
@@ -203,7 +202,6 @@ impl H3Server {
         Ok(responsebytes)
     }
 }
-
 
 #[tokio::main]
 async fn main() -> Result<()> {
