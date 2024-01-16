@@ -13,7 +13,7 @@ bson = { version = "2.6.1", features = ["serde_with"] }
 capnp = "0.17.2"
 capnp-rpc = "0.17.0"
 chrono = "0.4.26"
-clap = "4.3.11"
+clap = { version = "4.3.11", features = ["derive"] }
 dotenv = "0.15.0"
 ethereum-types = "0.14.1"
 futures = "0.3.28"

@@ -2,6 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use capnp::message::Builder;
+use clap::Parser;
 use fake::faker::address::raw::*;
 use fake::faker::name::raw::*;
 use fake::locales::*;
@@ -12,7 +13,6 @@ use hello_capnp::{people, person};
 use quinn::Endpoint;
 use rand::Rng;
 use rustls::RootCertStore;
-use structopt::StructOpt;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info};
 
@@ -21,27 +21,27 @@ pub mod hello_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/hello_capnp.rs"));
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "server")]
+#[derive(Parser, Debug)]
+#[clap(name = "server")]
 pub struct Opt {
-    #[structopt(
+    #[clap(
         long,
-        short,
+        short = 'c',
         default_value = "examples/ca.cert",
         help = "Certificate of CA who issues the server certificate"
     )]
     pub ca: PathBuf,
 
-    #[structopt(name = "keylogfile", long)]
+    #[clap(name = "keylogfile", long)]
     pub key_log_file: bool,
 
-    #[structopt()]
+    #[clap()]
     pub uri: String,
 
-    #[structopt(long = "wallet", default_value = "./wallets/mywallet.txt")]
+    #[clap(long = "wallet", default_value = "./wallets/mywallet.txt")]
     pub wallet_location: String,
 
-    #[structopt(long = "clientdb", default_value = "./data/myclient.sqlite")]
+    #[clap(long = "clientdb", default_value = "./data/myclient.sqlite")]
     pub clientdb_location: String,
 }
 
@@ -57,7 +57,7 @@ impl H3Client {
         }
     }
     pub fn get_cert_roots() -> Result<RootCertStore> {
-        let opt = Opt::from_args();
+        let opt = Opt::parse();
         let mut roots = rustls::RootCertStore::empty();
         match rustls_native_certs::load_native_certs() {
             Ok(certs) => {
@@ -75,7 +75,7 @@ impl H3Client {
         Ok(roots)
     }
     pub fn get_client_endpoint() -> Result<Endpoint> {
-        let opt = Opt::from_args();
+        let opt = Opt::parse();
         let roots = Self::get_cert_roots()?;
 
         let mut tls_config = rustls::ClientConfig::builder()
@@ -102,7 +102,7 @@ impl H3Client {
         apipath: &str,
         datatosend: &[u8],
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let opt = Opt::from_args();
+        let opt = Opt::parse();
         let fulluri = format!("{}{}", opt.uri, apipath);
         let uri = fulluri.parse::<http::Uri>()?;
         if uri.scheme() != Some(&http::uri::Scheme::HTTPS) {

@@ -1,19 +1,19 @@
 use anyhow::Result;
 use bytes::Bytes;
+use clap::Parser;
 use h3::{error::ErrorLevel, quic::BidiStream, server::RequestStream};
 use h3_quinn::quinn;
 use http::{Request, StatusCode};
 use quinn::Endpoint;
 use rustls::{Certificate, PrivateKey};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
-use structopt::StructOpt;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info, trace_span};
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "server")]
+#[derive(Parser, Debug)]
+#[clap(name = "server")]
 pub struct Opt {
-    #[structopt(
+    #[clap(
         short,
         long,
         default_value = "[::1]:4433",
@@ -21,16 +21,17 @@ pub struct Opt {
     )]
     pub listen: SocketAddr,
 
-    #[structopt(flatten)]
+    // Assuming you have a similar structure for `certs`
+    #[clap(flatten)]
     pub certs: Certs,
 
-    #[structopt(short, long, default_value = "./data/mytalk.sqlite")]
+    #[clap(short, long, default_value = "./data/mytalk.sqlite")]
     pub serverdb_location: String,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 pub struct Certs {
-    #[structopt(
+    #[clap(
         long,
         short,
         default_value = "examples/server.cert",
@@ -38,7 +39,7 @@ pub struct Certs {
     )]
     pub cert: PathBuf,
 
-    #[structopt(
+    #[clap(
         long,
         short,
         default_value = "examples/server.key",
@@ -126,7 +127,7 @@ impl H3Server {
     }
     pub async fn process(&mut self) -> Result<()> {
         self.usercheck().await?;
-        let opt = Opt::from_args();
+        let opt = Opt::parse();
 
         let Certs { cert, key } = opt.certs;
         let cert = Certificate(std::fs::read(cert)?);
