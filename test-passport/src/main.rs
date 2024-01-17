@@ -15,11 +15,11 @@ const HOME_COUNTRY_CODE: u64 = 100;
 
 // Define a struct representing the Passport Expiration Circuit
 #[derive(Clone)]
-struct PassportExpirationCircuit<F: PrimeField> {
+struct PassportHomeCheckCircuit<F: PrimeField> {
     current_code: Option<F>,
 }
 
-impl<F: PrimeField> Circuit<F> for PassportExpirationCircuit<F> {
+impl<F: PrimeField> Circuit<F> for PassportHomeCheckCircuit<F> {
     fn synthesize<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         // Extract the current code value from the struct
         let current_code_value = self.current_code;
@@ -51,7 +51,7 @@ fn main() {
     let current_code = Some(Fr::from(100u64));
 
     // Create an instance of the Passport Expiration Circuit
-    let circuit = PassportExpirationCircuit { current_code };
+    let circuit = PassportHomeCheckCircuit { current_code };
 
     // Generate random parameters for the zk-SNARK proof
     let params = {
