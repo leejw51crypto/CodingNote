@@ -10,33 +10,32 @@ use bellman::groth16::{
     create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
 };
 
-// Define a constant for the home country's code
+// Constant for the predefined home country code
 const HOME_COUNTRY_CODE: u64 = 100;
 
-// Define a struct representing the Passport Expiration Circuit
+// Struct representing the Passport Home Check Circuit
 #[derive(Clone)]
 struct PassportHomeCheckCircuit<F: PrimeField> {
+    // Optional field for the current country code
     current_code: Option<F>,
 }
 
 impl<F: PrimeField> Circuit<F> for PassportHomeCheckCircuit<F> {
     fn synthesize<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        // Extract the current code value from the struct
+        // Extract and allocate the current code variable
         let current_code_value = self.current_code;
-
-        // Allocate a variable for the current code
         let current_code = cs.alloc(
             || "current_code",
             || current_code_value.ok_or(SynthesisError::AssignmentMissing),
         )?;
 
-        // Create a constant for the home country's code
+        // Allocate a constant for the home country's code
         let home_code_value = F::from(HOME_COUNTRY_CODE);
         let home_code = cs.alloc(|| "home_code", || Ok(home_code_value))?;
 
-        // Enforce that the current code is equal to the home country's code
+        // Constraint to enforce current code equals home country code
         cs.enforce(
-            || "current_code == HOME_COUNTRY_CODE",
+            || "check current_code equals home_code",
             |lc| lc + current_code,
             |lc| lc + CS::one(),
             |lc| lc + home_code,
@@ -47,34 +46,33 @@ impl<F: PrimeField> Circuit<F> for PassportHomeCheckCircuit<F> {
 }
 
 fn main() {
-    // Define the secret value for the current code
+    // Secret value of the current code for the zk-SNARK proof
     let current_code = Some(Fr::from(100u64));
 
-    // Create an instance of the Passport Expiration Circuit
+    // Instantiate the circuit with the current code
     let circuit = PassportHomeCheckCircuit { current_code };
 
-    // Generate random parameters for the zk-SNARK proof
+    // Generate parameters for the zk-SNARK proof
     let params = {
         let rng = &mut thread_rng();
         generate_random_parameters::<Bls12, _, _>(circuit.clone(), rng).unwrap()
     };
 
-    // Create a random proof for the circuit
+    // Generate a zk-SNARK proof for the circuit
     let proof = {
         let rng = &mut thread_rng();
-        create_random_proof(circuit.clone(), &params, rng).unwrap()
+        create_random_proof(circuit, &params, rng).unwrap()
     };
 
-    // Prepare the verifying key
+    // Prepare the verifying key for the proof
     let pvk = prepare_verifying_key(&params.vk);
 
-    // Verify the proof with no public inputs
+    // Verify the zk-SNARK proof with no public inputs
     let valid = verify_proof(&pvk, &proof, &[]);
 
-    // Check the validity of the proof and print the result
-    if valid.is_ok() {
-        println!("Current code is the same as the home country's code!");
-    } else {
-        println!("Current code is not the same as the home country's code!");
+    // Output the result of the proof verification
+    match valid {
+        Ok(_) => println!("Proof verified: Current code matches home country code!"),
+        Err(_) => println!("Proof failed: Current code does not match home country code!"),
     }
 }
