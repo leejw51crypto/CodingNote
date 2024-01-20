@@ -1,5 +1,10 @@
 # Fiat-Shamir heuristic
 
+# discrete logarithm , x,y are bignumber (32bytes)
+# y = g^x  easy 
+# x = log_g(y) hard (almost impossible)
+
+
 # x= secret
 # v= random()
 # y= g^x ( mod p)
