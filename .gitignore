@@ -36,3 +36,10 @@ typechain-types/
 *.pem
 *.cert
 *.key
+*.txt
+*.sh
+*.cnf
+*.swp
+
+.DS_Store
+*.json

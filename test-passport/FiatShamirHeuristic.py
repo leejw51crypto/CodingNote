@@ -4,6 +4,11 @@
 # y = g^x  easy 
 # x = log_g(y) hard (almost impossible)
 
+# in curcuit design
+# for secrets x1,x2 , we can encode 
+# y1 = g^x1
+# y2 = g^x2
+# y1*y2 = g^(x1+x2)
 
 # x= secret
 # v= random()
