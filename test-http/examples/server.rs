@@ -11,8 +11,17 @@ struct Args {
 }
 
 // The store function now takes a String directly from the request body
-async fn store(text: String) -> impl Responder {
-    HttpResponse::Ok().body(text)
+//async fn store(text: String) -> impl Responder {
+//    HttpResponse::Ok().body(text)
+//}
+
+async fn store(bytes: web::Bytes) -> impl Responder {
+    // If you need to convert bytes back to String, use the following line:
+    let text = String::from_utf8_lossy(&bytes);
+    println!("Received {} bytes", bytes.len());
+    println!("text {}", text);
+
+    HttpResponse::Ok().body(bytes)
 }
 
 #[actix_web::main]

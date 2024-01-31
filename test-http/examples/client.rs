@@ -27,11 +27,13 @@ async fn main() -> Result<(), reqwest::Error> {
         large_text.push_str(&part.join(" "));
         large_text.push(' '); // Add space between parts
     }
+    let large_text_bytes = large_text.into_bytes();
     //println!("large text {}", large_text);
 
     let response = client
         .post(&format!("{}/store", args.server))
-        .body(large_text) // Send large text in request body
+        //.body(large_text) // Send large text in request body
+        .body(large_text_bytes)
         .send()
         .await?;
 
