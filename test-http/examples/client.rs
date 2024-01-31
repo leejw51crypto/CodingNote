@@ -28,17 +28,16 @@ async fn main() -> Result<(), reqwest::Error> {
         large_text.push(' '); // Add space between parts
     }
     let large_text_bytes = large_text.into_bytes();
-    //println!("large text {}", large_text);
 
     let response = client
         .post(&format!("{}/store", args.server))
-        //.body(large_text) // Send large text in request body
         .body(large_text_bytes)
         .send()
         .await?;
 
     if response.status().is_success() {
-        let response_text = response.text().await?;
+        let response_bytes = response.bytes().await?;
+        let response_text = String::from_utf8_lossy(&response_bytes);
         println!("Response Text: {}", response_text);
     } else {
         eprintln!("Failed to call /store");
