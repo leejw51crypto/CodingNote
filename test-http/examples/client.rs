@@ -22,7 +22,7 @@ async fn main() -> Result<(), reqwest::Error> {
     // Generate a large text string
 
     let mut large_text = String::new();
-    while large_text.split_whitespace().count() < 1000 {
+    while large_text.split_whitespace().count() < 10000 {
         let part: Vec<String> = (Name(EN), 3..5).fake();
         large_text.push_str(&part.join(" "));
         large_text.push(' '); // Add space between parts
@@ -30,8 +30,8 @@ async fn main() -> Result<(), reqwest::Error> {
     //println!("large text {}", large_text);
 
     let response = client
-        .get(&format!("{}/store", args.server))
-        .query(&[("text", &large_text)])
+        .post(&format!("{}/store", args.server))
+        .body(large_text) // Send large text in request body
         .send()
         .await?;
 

@@ -1,11 +1,6 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use clap::Parser;
 use serde::Deserialize;
-// Define a struct to deserialize the query parameters
-#[derive(Deserialize)]
-struct QueryInfo {
-    text: String,
-}
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -15,15 +10,16 @@ struct Args {
     address: String,
 }
 
-async fn store(info: web::Query<QueryInfo>) -> impl Responder {
-    HttpResponse::Ok().body(info.text.clone())
+// The store function now takes a String directly from the request body
+async fn store(text: String) -> impl Responder {
+    HttpResponse::Ok().body(text)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
-    HttpServer::new(|| App::new().route("/store", web::get().to(store)))
+    HttpServer::new(|| App::new().route("/store", web::post().to(store)))
         .bind(&args.address)?
         .run()
         .await
