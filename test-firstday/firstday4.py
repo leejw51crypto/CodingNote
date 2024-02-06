@@ -59,7 +59,7 @@ def get_latest_balance(eth_address, block_number):
         'module': 'account',
         'action': 'balance',
         'address': eth_address,
-        'tag': hex_first_block
+     #   'tag': hex_first_block
     }
     response = requests.get(BASE_URL, params=params)
     data = response.json()
@@ -139,6 +139,6 @@ def fetch_latest():
     else:
         write_to_console_and_file("No data available for the latest block and balance")
 
-fetch_first_day_data()
-time.sleep(10)
+#fetch_first_day_data()
+#time.sleep(10)
 fetch_latest()
