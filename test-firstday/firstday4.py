@@ -139,6 +139,6 @@ def fetch_latest():
     else:
         write_to_console_and_file("No data available for the latest block and balance")
 
-#fetch_first_day_data()
-#time.sleep(10)
+fetch_first_day_data()
+time.sleep(10)
 fetch_latest()
