@@ -7,6 +7,12 @@ edition = "2021"
 anyhow = "1.0.81"
 clap = { version = "4.5.2", features = ["derive"] }
 hf-hub = "0.3.2"
-llama-cpp-2 = "0.1.38"
 text_io = "0.1.12"
 tokio = { version = "1.36.0", features = ["full"] }
+
+
+[target.'cfg(target_os = "linux")'.dependencies]
+llama-cpp-2 = { version = "0.1.38", features = ["cublas"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+llama-cpp-2 = "0.1.38"
