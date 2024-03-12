@@ -28,6 +28,7 @@ use std::pin::pin;
 use std::str::FromStr;
 use std::time::Duration;
 
+/// Command line arguments
 #[derive(clap::Parser, Debug, Clone)]
 struct Args {
     /// The path to the model
@@ -36,10 +37,10 @@ struct Args {
     /// The prompt
     #[clap(default_value = "Hello my name is")]
     prompt: String,
-    /// set the length of the prompt + output in tokens
+    /// Set the length of the prompt + output in tokens
     #[arg(long, default_value_t = 32)]
     n_len: i32,
-    /// override some parameters of the model
+    /// Override some parameters of the model
     #[arg(short = 'o', value_parser = parse_key_val)]
     key_value_overrides: Vec<(String, ParamOverrideValue)>,
     /// Disable offloading layers to the gpu
@@ -64,19 +65,20 @@ fn parse_key_val(s: &str) -> Result<(String, ParamOverrideValue)> {
     Ok((key, value))
 }
 
+/// Model source options
 #[derive(clap::Subcommand, Debug, Clone)]
 enum Model {
     /// Use an already downloaded model
     Local {
-        /// The path to the model. e.g. `/home/marcus/.cache/huggingface/hub/models--TheBloke--Llama-2-7B-Chat-GGUF/blobs/08a5566d61d7cb6b420c3e4387a39e0078e1f2fe5f055f3a03887385304d4bfa`
+        /// The path to the model
         path: PathBuf,
     },
     /// Download a model from huggingface (or use a cached version)
     #[clap(name = "hf-model")]
     HuggingFace {
-        /// the repo containing the model. e.g. `TheBloke/Llama-2-7B-Chat-GGUF`
+        /// The repo containing the model
         repo: String,
-        /// the model name. e.g. `llama-2-7b-chat.Q4_K_M.gguf`
+        /// The model name
         model: String,
     },
 }
@@ -97,25 +99,29 @@ impl Model {
     }
 }
 
+/// Llama text generator
 pub struct LlamaGenerator {
     backend: LlamaBackend,
     model: LlamaModel,
 }
+
 impl LlamaGenerator {
+    /// Create a new Llama text generator
     pub fn new() -> Result<Self> {
         let backend = LlamaBackend::init()?;
-        let model = create_model(&backend)?;
+        let model = Self::create_model(&backend)?;
         Ok(Self { backend, model })
     }
 
+    /// Run the text generation
     pub async fn run(&mut self) -> Result<()> {
         loop {
-            println!("enter prompt=");
-            let inputprompt: String = text_io::read!("{}\n");
-            if inputprompt.is_empty() {
+            println!("Enter prompt:");
+            let input_prompt: String = text_io::read!("{}\n");
+            if input_prompt.is_empty() {
                 break;
             }
-            // initialize the context
+            // Initialize the context
             let ctx_params = LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(2048))
                 .with_seed(1234);
@@ -125,180 +131,184 @@ impl LlamaGenerator {
                 .new_context(&self.backend, ctx_params)
                 .with_context(|| "unable to create the llama_context")?;
 
-            let mut batch = create_batch(&self.model, &ctx, &inputprompt)?;
+            let mut batch = Self::create_batch(&self.model, &ctx, &input_prompt)?;
             println!("  ");
             println!("#################batch created#################");
             println!("batch {:?}", batch);
 
-            generate_text(&self.model, &mut ctx, &mut batch, &inputprompt)?;
+            Self::generate_text(&self.model, &mut ctx, &mut batch, &input_prompt)?;
         }
         Ok(())
     }
-}
-fn create_model(backend: &LlamaBackend) -> Result<LlamaModel> {
-    let Args {
-        n_len: _,
-        model,
-        prompt: _,
-        #[cfg(feature = "cublas")]
-        disable_gpu,
-        key_value_overrides,
-    } = Args::parse();
 
-    // init LLM
-    //  let backend = LlamaBackend::init()?;
+    /// Create the Llama model
+    fn create_model(backend: &LlamaBackend) -> Result<LlamaModel> {
+        let Args {
+            n_len: _,
+            model,
+            prompt: _,
+            #[cfg(feature = "cublas")]
+            disable_gpu,
+            key_value_overrides,
+        } = Args::parse();
 
-    // offload all layers to the gpu
-    let model_params = {
-        #[cfg(feature = "cublas")]
-        if !disable_gpu {
-            LlamaModelParams::default().with_n_gpu_layers(1000)
-        } else {
+        // Initialize model parameters
+        let model_params = {
+            #[cfg(feature = "cublas")]
+            if !disable_gpu {
+                LlamaModelParams::default().with_n_gpu_layers(1000)
+            } else {
+                LlamaModelParams::default()
+            }
+            #[cfg(not(feature = "cublas"))]
             LlamaModelParams::default()
+        };
+
+        let mut model_params = pin!(model_params);
+
+        for (k, v) in &key_value_overrides {
+            let k = CString::new(k.as_bytes()).with_context(|| format!("invalid key: {k}"))?;
+            model_params.as_mut().append_kv_override(k.as_c_str(), *v);
         }
-        #[cfg(not(feature = "cublas"))]
-        LlamaModelParams::default()
-    };
 
-    let mut model_params = pin!(model_params);
+        let model_path = model
+            .get_or_load()
+            .with_context(|| "failed to get model from args")?;
 
-    for (k, v) in &key_value_overrides {
-        let k = CString::new(k.as_bytes()).with_context(|| format!("invalid key: {k}"))?;
-        model_params.as_mut().append_kv_override(k.as_c_str(), *v);
+        let model = LlamaModel::load_from_file(backend, model_path, &model_params)
+            .with_context(|| "unable to load model")?;
+        Ok(model)
     }
 
-    let model_path = model
-        .get_or_load()
-        .with_context(|| "failed to get model from args")?;
+    /// Create a Llama batch for text generation
+    fn create_batch(
+        mymodel: &LlamaModel,
+        ctx: &LlamaContext,
+        input_prompt: &str,
+    ) -> Result<LlamaBatch> {
+        let Args {
+            n_len,
+            model: _,
+            prompt: _,
+            #[cfg(feature = "cublas")]
+            disable_gpu,
+            key_value_overrides: _,
+        } = Args::parse();
+        // Tokenize the prompt
+        let tokens_list: Vec<LlamaToken> = mymodel
+            .str_to_token(input_prompt, AddBos::Always)
+            .with_context(|| format!("failed to tokenize {input_prompt}"))?;
+        println!("token list : {:?}", tokens_list);
+        let n_cxt = ctx.n_ctx() as i32;
+        let n_kv_req = tokens_list.len() as i32 + (n_len - tokens_list.len() as i32);
 
-    let model = LlamaModel::load_from_file(backend, model_path, &model_params)
-        .with_context(|| "unable to load model")?;
-    Ok(model)
-}
+        eprintln!("n_len = {n_len}, n_ctx = {n_cxt}, k_kv_req = {n_kv_req}");
 
-fn create_batch(mymodel: &LlamaModel, ctx: &LlamaContext, inputprompt: &str) -> Result<LlamaBatch> {
-    let Args {
-        n_len,
-        model: _,
-        prompt: _,
-        #[cfg(feature = "cublas")]
-        disable_gpu,
-        key_value_overrides: _,
-    } = Args::parse();
-    // tokenize the prompt
+        // Make sure the KV cache is big enough to hold all the prompt and generated tokens
+        if n_kv_req > n_cxt {
+            bail!(
+                "n_kv_req > n_ctx, the required kv cache size is not big enough
+    either reduce n_len or increase n_ctx"
+            )
+        }
 
-    let tokens_list: Vec<LlamaToken> = mymodel
-        .str_to_token(inputprompt, AddBos::Always)
-        .with_context(|| format!("failed to tokenize {inputprompt}"))?;
-    println!("token list : {:?}", tokens_list);
-    let n_cxt = ctx.n_ctx() as i32;
-    let n_kv_req = tokens_list.len() as i32 + (n_len - tokens_list.len() as i32);
+        if tokens_list.len() >= usize::try_from(n_len)? {
+            bail!("the prompt is too long, it has more tokens than n_len")
+        }
 
-    eprintln!("n_len = {n_len}, n_ctx = {n_cxt}, k_kv_req = {n_kv_req}");
+        // Print the prompt token-by-token
+        eprintln!();
 
-    // make sure the KV cache is big enough to hold all the prompt and generated tokens
-    if n_kv_req > n_cxt {
-        bail!(
-            "n_kv_req > n_ctx, the required kv cache size is not big enough
-either reduce n_len or increase n_ctx"
-        )
+        for token in &tokens_list {
+            eprint!("{}", mymodel.token_to_str(*token)?);
+        }
+
+        std::io::stderr().flush()?;
+
+        // Create a llama_batch with size 512
+        // We use this object to submit token data for decoding
+        let mut batch = LlamaBatch::new(512, 1);
+
+        let last_index: i32 = (tokens_list.len() - 1) as i32;
+        for (i, token) in (0_i32..).zip(tokens_list.into_iter()) {
+            // llama_decode will output logits only for the last token of the prompt
+            let is_last = i == last_index;
+            batch.add(token, i, &[0], is_last)?;
+        }
+
+        Ok(batch)
     }
 
-    if tokens_list.len() >= usize::try_from(n_len)? {
-        bail!("the prompt is too long, it has more tokens than n_len")
-    }
+    /// Generate text based on the input prompt
+    fn generate_text(
+        mymodel: &LlamaModel,
+        ctx: &mut LlamaContext,
+        batch: &mut LlamaBatch,
+        _input_prompt: &str,
+    ) -> Result<()> {
+        let Args {
+            n_len,
+            model: _,
+            prompt: _,
+            #[cfg(feature = "cublas")]
+            disable_gpu,
+            key_value_overrides: _,
+        } = Args::parse();
 
-    // print the prompt token-by-token
-    eprintln!();
+        ctx.decode(batch).with_context(|| "llama_decode() failed")?;
 
-    for token in &tokens_list {
-        eprint!("{}", mymodel.token_to_str(*token)?);
-    }
+        // Main loop
+        let mut n_cur = batch.n_tokens();
+        let mut n_decode = 0;
 
-    std::io::stderr().flush()?;
+        let t_main_start = ggml_time_us();
 
-    // create a llama_batch with size 512
-    // we use this object to submit token data for decoding
-    let mut batch = LlamaBatch::new(512, 1);
+        while n_cur <= n_len {
+            // Sample the next token
+            {
+                let candidates = ctx.candidates_ith(batch.n_tokens() - 1);
 
-    let last_index: i32 = (tokens_list.len() - 1) as i32;
-    for (i, token) in (0_i32..).zip(tokens_list.into_iter()) {
-        // llama_decode will output logits only for the last token of the prompt
-        let is_last = i == last_index;
-        batch.add(token, i, &[0], is_last)?;
-    }
+                let candidates_p = LlamaTokenDataArray::from_iter(candidates, false);
 
-    Ok(batch)
-}
-fn generate_text(
-    mymodel: &LlamaModel,
-    ctx: &mut LlamaContext,
-    batch: &mut LlamaBatch,
-    _inputprompt: &str,
-) -> Result<()> {
-    let Args {
-        n_len,
-        model: _,
-        prompt: _,
-        #[cfg(feature = "cublas")]
-        disable_gpu,
-        key_value_overrides: _,
-    } = Args::parse();
+                // Sample the most likely token
+                let new_token_id = ctx.sample_token_greedy(candidates_p);
 
-    ctx.decode(batch).with_context(|| "llama_decode() failed")?;
+                // Is it an end of stream?
+                if new_token_id == mymodel.token_eos() {
+                    eprintln!();
+                    break;
+                }
 
-    // main loop
+                print!("{}", mymodel.token_to_str(new_token_id)?);
+                std::io::stdout().flush()?;
 
-    let mut n_cur = batch.n_tokens();
-    let mut n_decode = 0;
-
-    let t_main_start = ggml_time_us();
-
-    while n_cur <= n_len {
-        // sample the next token
-        {
-            let candidates = ctx.candidates_ith(batch.n_tokens() - 1);
-
-            let candidates_p = LlamaTokenDataArray::from_iter(candidates, false);
-
-            // sample the most likely token
-            let new_token_id = ctx.sample_token_greedy(candidates_p);
-
-            // is it an end of stream?
-            if new_token_id == mymodel.token_eos() {
-                eprintln!();
-                break;
+                batch.clear();
+                batch.add(new_token_id, n_cur, &[0], true)?;
             }
 
-            print!("{}", mymodel.token_to_str(new_token_id)?);
-            std::io::stdout().flush()?;
+            n_cur += 1;
 
-            batch.clear();
-            batch.add(new_token_id, n_cur, &[0], true)?;
+            ctx.decode(batch).with_context(|| "failed to eval")?;
+
+            n_decode += 1;
         }
 
-        n_cur += 1;
+        eprintln!("\n");
 
-        ctx.decode(batch).with_context(|| "failed to eval")?;
+        let t_main_end = ggml_time_us();
 
-        n_decode += 1;
+        let duration = Duration::from_micros((t_main_end - t_main_start) as u64);
+
+        eprintln!(
+            "decoded {} tokens in {:.2} s, speed {:.2} t/s\n",
+            n_decode,
+            duration.as_secs_f32(),
+            n_decode as f32 / duration.as_secs_f32()
+        );
+
+        println!("{}", ctx.timings());
+        Ok(())
     }
-
-    eprintln!("\n");
-
-    let t_main_end = ggml_time_us();
-
-    let duration = Duration::from_micros((t_main_end - t_main_start) as u64);
-
-    eprintln!(
-        "decoded {} tokens in {:.2} s, speed {:.2} t/s\n",
-        n_decode,
-        duration.as_secs_f32(),
-        n_decode as f32 / duration.as_secs_f32()
-    );
-
-    println!("{}", ctx.timings());
-    Ok(())
 }
 
 #[tokio::main]
