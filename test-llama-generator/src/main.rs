@@ -108,7 +108,7 @@ impl LlamaGenerator {
         Ok(Self { backend, model })
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub async fn run(&mut self) -> Result<()> {
         loop {
             println!("enter prompt=");
             let inputprompt: String = text_io::read!("{}\n");
@@ -126,7 +126,7 @@ impl LlamaGenerator {
                 .with_context(|| "unable to create the llama_context")?;
 
             let mut batch = create_batch(&self.model, &ctx, &inputprompt)?;
-            println!("");
+            println!("  ");
             println!("#################batch created#################");
             println!("batch {:?}", batch);
 
@@ -137,9 +137,9 @@ impl LlamaGenerator {
 }
 fn create_model(backend: &LlamaBackend) -> Result<LlamaModel> {
     let Args {
-        n_len,
+        n_len: _,
         model,
-        prompt,
+        prompt: _,
         #[cfg(feature = "cublas")]
         disable_gpu,
         key_value_overrides,
@@ -171,7 +171,7 @@ fn create_model(backend: &LlamaBackend) -> Result<LlamaModel> {
         .get_or_load()
         .with_context(|| "failed to get model from args")?;
 
-    let model = LlamaModel::load_from_file(&backend, model_path, &model_params)
+    let model = LlamaModel::load_from_file(backend, model_path, &model_params)
         .with_context(|| "unable to load model")?;
     Ok(model)
 }
@@ -179,16 +179,16 @@ fn create_model(backend: &LlamaBackend) -> Result<LlamaModel> {
 fn create_batch(mymodel: &LlamaModel, ctx: &LlamaContext, inputprompt: &str) -> Result<LlamaBatch> {
     let Args {
         n_len,
-        model,
-        prompt,
+        model: _,
+        prompt: _,
         #[cfg(feature = "cublas")]
         disable_gpu,
-        key_value_overrides,
+        key_value_overrides: _,
     } = Args::parse();
     // tokenize the prompt
 
     let tokens_list: Vec<LlamaToken> = mymodel
-        .str_to_token(&inputprompt, AddBos::Always)
+        .str_to_token(inputprompt, AddBos::Always)
         .with_context(|| format!("failed to tokenize {inputprompt}"))?;
     println!("token list : {:?}", tokens_list);
     let n_cxt = ctx.n_ctx() as i32;
@@ -234,15 +234,15 @@ fn generate_text(
     mymodel: &LlamaModel,
     ctx: &mut LlamaContext,
     batch: &mut LlamaBatch,
-    inputprompt: &str,
+    _inputprompt: &str,
 ) -> Result<()> {
     let Args {
         n_len,
-        model,
-        prompt,
+        model: _,
+        prompt: _,
         #[cfg(feature = "cublas")]
         disable_gpu,
-        key_value_overrides,
+        key_value_overrides: _,
     } = Args::parse();
 
     ctx.decode(batch).with_context(|| "llama_decode() failed")?;
@@ -300,18 +300,11 @@ fn generate_text(
     println!("{}", ctx.timings());
     Ok(())
 }
-fn main() -> Result<()> {
-    let Args {
-        n_len,
-        model,
-        prompt,
-        #[cfg(feature = "cublas")]
-        disable_gpu,
-        key_value_overrides,
-    } = Args::parse();
 
+#[tokio::main]
+async fn main() -> Result<()> {
     let mut generator = LlamaGenerator::new()?;
 
-    generator.run();
+    generator.run().await?;
     Ok(())
 }
