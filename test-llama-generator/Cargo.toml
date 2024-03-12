@@ -8,3 +8,4 @@ anyhow = "1.0.81"
 clap = { version = "4.5.2", features = ["derive"] }
 hf-hub = "0.3.2"
 llama-cpp-2 = "0.1.38"
+text_io = "0.1.12"

@@ -138,7 +138,7 @@ fn create_model(backend: &LlamaBackend) -> Result<LlamaModel> {
     Ok(model)
 }
 
-fn create_batch(mymodel: &LlamaModel, ctx: &LlamaContext) -> Result<LlamaBatch> {
+fn create_batch(mymodel: &LlamaModel, ctx: &LlamaContext, inputprompt: &str) -> Result<LlamaBatch> {
     let Args {
         n_len,
         model,
@@ -150,8 +150,8 @@ fn create_batch(mymodel: &LlamaModel, ctx: &LlamaContext) -> Result<LlamaBatch> 
     // tokenize the prompt
 
     let tokens_list: Vec<LlamaToken> = mymodel
-        .str_to_token(&prompt, AddBos::Always)
-        .with_context(|| format!("failed to tokenize {prompt}"))?;
+        .str_to_token(&inputprompt, AddBos::Always)
+        .with_context(|| format!("failed to tokenize {inputprompt}"))?;
     println!("token list : {:?}", tokens_list);
     let n_cxt = ctx.n_ctx() as i32;
     let n_kv_req = tokens_list.len() as i32 + (n_len - tokens_list.len() as i32);
@@ -196,6 +196,7 @@ fn generate_text(
     mymodel: &LlamaModel,
     ctx: &mut LlamaContext,
     batch: &mut LlamaBatch,
+    inputprompt: &str,
 ) -> Result<()> {
     let Args {
         n_len,
@@ -275,20 +276,28 @@ fn main() -> Result<()> {
     let backend = LlamaBackend::init()?;
 
     let model: LlamaModel = create_model(&backend)?;
-    // initialize the context
-    let ctx_params = LlamaContextParams::default()
-        .with_n_ctx(NonZeroU32::new(2048))
-        .with_seed(1234);
 
-    let mut ctx: LlamaContext = model
-        .new_context(&backend, ctx_params)
-        .with_context(|| "unable to create the llama_context")?;
+    loop {
+        println!("enter prompt=");
+        let inputprompt: String = text_io::read!("{}\n");
+        if inputprompt.is_empty() {
+            break;
+        }
+        // initialize the context
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(NonZeroU32::new(2048))
+            .with_seed(1234);
 
-    let mut batch = create_batch(&model, &ctx)?;
-    println!("");
-    println!("#################batch created#################");
-    println!("batch {:?}", batch);
+        let mut ctx: LlamaContext = model
+            .new_context(&backend, ctx_params)
+            .with_context(|| "unable to create the llama_context")?;
 
-    generate_text(&model, &mut ctx, &mut batch)?;
+        let mut batch = create_batch(&model, &ctx, &inputprompt)?;
+        println!("");
+        println!("#################batch created#################");
+        println!("batch {:?}", batch);
+
+        generate_text(&model, &mut ctx, &mut batch, &inputprompt)?;
+    }
     Ok(())
 }
