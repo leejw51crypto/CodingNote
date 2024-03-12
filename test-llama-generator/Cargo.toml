@@ -11,6 +11,10 @@ text_io = "0.1.12"
 tokio = { version = "1.36.0", features = ["full"] }
 
 
+[features]
+cublas = ["llama-cpp-2/cublas"]
+
+
 [target.'cfg(target_os = "linux")'.dependencies]
 llama-cpp-2 = { version = "0.1.38", features = ["cublas"] }
 
