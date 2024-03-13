@@ -1,7 +1,7 @@
+use tokio::runtime::Runtime;
 use tokio::time::{sleep, Duration};
 
 async fn blocking_task() {
-    println!("blocking task started");
     // Simulating a blocking operation without yielding
     loop {
         // Perform some work without yielding
@@ -16,8 +16,15 @@ async fn other_task() {
 
 #[tokio::main]
 async fn main() {
-    // because rust has multithread pool for runtime, other_task runs fine
-    tokio::spawn(blocking_task());
+    // Create a new runtime for blocking tasks
+    let blocking_runtime = Runtime::new().unwrap();
+
+    // Spawn the blocking task on the blocking runtime
+    blocking_runtime.spawn(async move {
+        blocking_task().await;
+    });
+
+    // Spawn the other task on the main runtime
     tokio::spawn(other_task());
 
     sleep(Duration::from_secs(2)).await;
