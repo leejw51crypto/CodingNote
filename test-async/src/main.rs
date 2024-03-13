@@ -17,7 +17,8 @@ async fn other_task() {
 #[tokio::main]
 async fn main() {
     // because rust has multithread pool for runtime, other_task runs fine
-    tokio::spawn(blocking_task());
+    //tokio::spawn(blocking_task());
+    tokio::task::spawn_blocking(blocking_task);
     tokio::spawn(other_task());
 
     sleep(Duration::from_secs(2)).await;
