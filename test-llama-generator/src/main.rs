@@ -311,10 +311,17 @@ impl LlamaGenerator {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+async fn run_model() -> Result<()> {
     let mut generator = LlamaGenerator::new()?;
 
     generator.run().await?;
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let handle = tokio::task::spawn_blocking(run_model);
+    // wait for handle
+    handle.await?.await?;
     Ok(())
 }
