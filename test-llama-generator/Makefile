@@ -1,4 +1,4 @@
-all: build
+all: mistral 
 
 build:
 	cargo build
