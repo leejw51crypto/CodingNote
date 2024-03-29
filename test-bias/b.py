@@ -24,6 +24,13 @@ X = np.array([[0, 0, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]])
 # Output data (shape: 4x4)
 y = np.array([[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 0]])
 
+print(f"Train input: {X}")
+print(f"Train output: {y}")
+
+# Get the true labels from the output data
+true_labels = np.argmax(y, axis=1)
+print(f"True labels before training: {true_labels}")
+
 # Initialize weights and biases randomly
 hidden_weights = np.random.uniform(size=(3, 5))  # shape: 3x5
 hidden_bias = np.random.uniform(size=(1, 5))     # shape: 1x5
@@ -61,8 +68,8 @@ for i in range(epochs):
         loss = np.mean(cross_entropy_loss(y, predicted_output))
         print(f"Epoch: {i}, Loss: {loss}")
 
-# Generate sample data for inference (shape: 4x3)
-sample_data = np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 1]])
+# Use the same input data for inference
+sample_data = X
 
 # Perform inference on sample data
 hidden_layer_activation = np.dot(sample_data, hidden_weights) + hidden_bias  # shape: 4x5
@@ -71,7 +78,12 @@ hidden_layer_output = relu(hidden_layer_activation)                          # s
 output_layer_activation = np.dot(hidden_layer_output, output_weights) + output_bias  # shape: 4x4
 predicted_output = softmax(output_layer_activation)                                  # shape: 4x4
 
+# Get the predicted class labels
+predicted_labels = np.argmax(predicted_output, axis=1)
+
 print("Inference on sample data:")
 print(sample_data)
-print("Predicted output:")
-print(predicted_output)
+print("Predicted labels:")
+print(predicted_labels)
+print("True labels:")
+print(true_labels)
