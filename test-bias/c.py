@@ -14,6 +14,7 @@ def softmax(z):
     return exp_z / np.sum(exp_z, axis=1, keepdims=True)
 
 def softmax_jacobian(z):
+    print(f"z  {z}")
     """
     Computes the Jacobian matrix of the softmax function for a given input tensor.
 
@@ -24,7 +25,10 @@ def softmax_jacobian(z):
         numpy.ndarray: Jacobian matrix of shape (num_classes, num_classes).
     """
     sm = softmax(z)
+    print(f"z shape {z.shape}")
+    print(f"sm shape {sm.shape}")
     num_classes = z.shape[1]
+    print(f"num_classes {num_classes}")
     jacobian = np.zeros((num_classes, num_classes))
     for i in range(num_classes):
         for j in range(num_classes):
@@ -53,6 +57,8 @@ def softmax_gradient(z, grad_output):
 # Example usage
 z = np.array([[1.0, 2.0, 3.0]])  # Input tensor of shape (1, 3)
 grad_output = np.array([[0.1, 0.2, 0.7]])  # Gradient of the loss w.r.t. softmax output, of shape (1, 3)
+print(f"z {z}")
+print(f"grad_output {grad_output}")
 
 print("Input tensor shape:", z.shape)
 print("Gradient output shape:", grad_output.shape)
