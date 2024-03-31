@@ -1,0 +1,13 @@
+[package]
+name = "test-gluesql"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.81"
+chrono = "0.4.37"
+fake = "2.9.2"
+gluesql = "0.15.0"
+tokio = { version = "1.37.0", features = ["full"] }
