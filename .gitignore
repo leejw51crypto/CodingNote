@@ -44,3 +44,10 @@ typechain-types/
 .DS_Store
 *.json
 a.out
+
+*.tar
+*.zip
+*.md
+*.jpg
+*.png
+*.doc
