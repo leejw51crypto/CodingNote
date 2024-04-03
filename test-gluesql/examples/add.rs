@@ -1,10 +1,11 @@
+use anyhow::Result;
+use gluesql::prelude::Value;
 use {
     chrono::Utc,
     fake::faker::address::en::SecondaryAddress,
     fake::{faker::name::en::Name, faker::phone_number::en::PhoneNumber, Fake},
     gluesql::{prelude::Glue, sled_storage::SledStorage},
 };
-use anyhow::Result;
 struct GreetRow {
     name: String,
     address: String,
@@ -12,13 +13,7 @@ struct GreetRow {
     timestamp: String,
 }
 
-
-
-async fn write_option(
-    glue: &mut Glue<SledStorage>,
-    key: &str,
-    value: &str,
-) -> Result<()> {
+async fn write_option(glue: &mut Glue<SledStorage>, key: &str, value: &str) -> Result<()> {
     println!("write option {} {}", key, value);
 
     // Check if the key exists
@@ -26,38 +21,39 @@ async fn write_option(
     let result = glue.execute(&query).await?;
 
     if let Some(payload) = result.into_iter().next() {
-        if let Some(existing_value) = payload.select().unwrap().next() {
-            // Key exists, perform an update
-            let update_query = format!(
-                "UPDATE options SET myvalue = '{}' WHERE mykey = '{}'",
-                value, key
-            );
-            println!("update query {}", update_query);
-            glue.execute(&update_query).await?;
-        } else {
-            // Key doesn't exist, perform an insert
-            let insert_query = format!(
-                "INSERT INTO options (mykey, myvalue) VALUES ('{}', '{}')",
-                key, value
-            );
-            println!("insert query {}", insert_query);
-            glue.execute(&insert_query).await?;
+        // print payload
+        println!("payload {:?}", payload);
+        match payload
+            .select()
+            .ok_or(anyhow::anyhow!("Failed to select payload"))?
+            .next()
+        {
+            Some(existing_value) => {
+                println!("existing value {:?}", existing_value);
+                // Key exists, perform an update
+                let update_query = format!(
+                    "UPDATE options SET myvalue = '{}' WHERE mykey = '{}'",
+                    value, key
+                );
+                println!("update query {}", update_query);
+                glue.execute(&update_query).await?;
+            }
+            None => {
+                // Key doesn't exist, perform an insert
+                let insert_query = format!(
+                    "INSERT INTO options (mykey, myvalue) VALUES ('{}', '{}')",
+                    key, value
+                );
+                println!("insert query {}", insert_query);
+                glue.execute(&insert_query).await?;
+            }
         }
     } else {
-        // Key doesn't exist, perform an insert
-        let insert_query = format!(
-            "INSERT INTO options (mykey, myvalue) VALUES ('{}', '{}')",
-            key, value
-        );
-        println!("insert query {}", insert_query);
-        glue.execute(&insert_query).await?;
+        anyhow::bail!("Failed to get payload");
     }
 
     Ok(())
 }
-
-
-
 
 async fn read_option(
     glue: &mut Glue<SledStorage>,
@@ -69,17 +65,30 @@ async fn read_option(
     let result = glue.execute(&query).await?;
 
     let value = if let Some(payload) = result.into_iter().next() {
-        payload
+        match payload
             .select()
-            .unwrap()
-            //.map(|row| row.get("myvalue").unwrap().to_string())
-            .map(|map| {
-                println!("map {:?}", map.get("myvalue"));
-                let value = *map.get("myvalue").unwrap();
-                value.into()
-            })
+            .ok_or(anyhow::anyhow!("Failed to select payload"))?
             .next()
-            .unwrap_or_else(|| defaultvalue.to_owned())
+        {
+            Some(map) => {
+                println!("map {:?}", map.get("myvalue"));
+                let value = map
+                    .get("myvalue")
+                    .ok_or(anyhow::anyhow!("Failed to get 'myvalue' from map"))?;
+                match value {
+                    Value::Null => "null".to_string(),
+                    Value::Bool(b) => b.to_string(),
+                    Value::I64(i) => i.to_string(),
+                    Value::F64(f) => f.to_string(),
+                    Value::Str(s) => s.clone(),
+                    Value::Bytea(b) => String::from_utf8_lossy(b).to_string(),
+                    Value::Date(d) => d.to_string(),
+                    Value::Time(t) => t.to_string(),
+                    _ => anyhow::bail!("Unsupported value type"),
+                }
+            }
+            None => defaultvalue.to_owned(),
+        }
     } else {
         defaultvalue.to_owned()
     };
@@ -87,7 +96,6 @@ async fn read_option(
     println!("read option {} value {} ok", key, value);
     Ok(value)
 }
-
 
 pub async fn run() {
     // Initiate a connection
