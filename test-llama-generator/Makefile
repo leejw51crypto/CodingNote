@@ -6,6 +6,9 @@ build:
 cuda:
 	cargo run --features cublas --release -- --n-len 1024 "what is rust lang?" hf-model TheBloke/Mistral-7B-Instruct-v0.2-GGUF  mistral-7b-instruct-v0.2.Q2_K.gguf
 
+cuda2:
+	./target/release/test-llama-generator  local ~/models/ggml-model-q4_0.gguf
+
 mistral:
 	cargo run --release -- --n-len 1024 "what is rust lang?" hf-model TheBloke/Mistral-7B-Instruct-v0.2-GGUF  mistral-7b-instruct-v0.2.Q2_K.gguf
 
