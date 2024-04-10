@@ -151,7 +151,10 @@ async fn main() -> Result<()> {
 
     // Create a MessageRequest
     let request = MessageRequest {
-        model: "claude-3-opus-20240229".to_string(),
+        // claude-3-opus-20240229
+        // claude-3-sonnet-20240229
+        // claude-3-haiku-20240307
+        model: "claude-3-haiku-20240307".to_string(),
         max_tokens: 256,
         messages: vec![Message {
             role: "user".to_string(),
