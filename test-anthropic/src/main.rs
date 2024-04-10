@@ -7,6 +7,7 @@ struct MessageRequest {
     model: String,
     max_tokens: i32,
     messages: Vec<Message>,
+    temperature: f32,
 }
 
 #[derive(Serialize)]
@@ -58,6 +59,7 @@ async fn main() {
             role: "user".to_string(),
             content: "what is rust lang?".to_string(),
         }],
+        temperature: 0.2,
     };
 
     // Send the request and get the response
