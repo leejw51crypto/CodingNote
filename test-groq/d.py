@@ -1,6 +1,7 @@
 from openai import OpenAI
 import json
 from datetime import date
+import math
 
 client = OpenAI()
 
@@ -21,6 +22,11 @@ def get_current_date():
     """Get the current date"""
     today = date.today()
     return json.dumps({"date": today.strftime("%Y-%m-%d")})
+
+def sin(degrees):
+    """Calculate the sine of an angle in degrees"""
+    radians = math.radians(degrees)
+    return json.dumps({"sin": math.sin(radians)})
 
 def run_conversation(prompt):
     # Step 1: send the conversation and available functions to the model
@@ -55,7 +61,24 @@ def run_conversation(prompt):
                     "required": [],
                 },
             },
-        }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "sin",
+                "description": "Calculate the sine of an angle in degrees",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "degrees": {
+                            "type": "number",
+                            "description": "The angle in degrees",
+                        },
+                    },
+                    "required": ["degrees"],
+                },
+            },
+        },
     ]
     response = client.chat.completions.create(
         model="gpt-3.5-turbo-0125",
@@ -72,7 +95,8 @@ def run_conversation(prompt):
         available_functions = {
             "get_current_weather": get_current_weather,
             "get_current_date": get_current_date,
-        }  # added get_current_date function
+            "sin": sin,
+        }  # added sin function
         messages.append(response_message)  # extend conversation with assistant's reply
         # Step 4: send the info for each function call and function response to the model
         for tool_call in tool_calls:
@@ -81,8 +105,11 @@ def run_conversation(prompt):
             function_args = json.loads(tool_call.function.arguments)
             # print the function name and arguments
             print(f"Function name: {function_name}")
+            print(f"Function arguments: {function_args}")
             
             function_response = function_to_call(**function_args)
+            print(f"Function response: {function_response}")
+            print("-----------------------------------")
 
             messages.append(
                 {
