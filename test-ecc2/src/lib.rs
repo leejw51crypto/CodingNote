@@ -33,12 +33,7 @@ pub fn make_key2() -> Result<Aes256> {
     Ok(cipher)
 }
 
-pub fn compute() -> Result<()> {
-    let cipher = make_key2()?;
-
-    // Plaintext to be encrypted (must be a multiple of 16 bytes)
-    let plaintext = b"Hello, World!!!!";
-
+pub fn encrypt_decrypt(cipher: &Aes256, plaintext: &[u8]) -> Result<()> {
     // Print plaintext
     println!("Plaintext: {:?}", plaintext);
     println!(
@@ -64,4 +59,16 @@ pub fn compute() -> Result<()> {
     println!("Decrypted Plaintext: {:?}", decrypted_plaintext);
 
     Ok(())
+}
+
+pub fn compute() -> Result<()> {
+    let cipher = make_key()?;
+    let plaintext = b"Hello, World!!!!";
+    encrypt_decrypt(&cipher, plaintext)
+}
+
+pub fn compute2() -> Result<()> {
+    let cipher = make_key()?;
+    let plaintext = b"Hello, World!!!!";
+    encrypt_decrypt(&cipher, plaintext)
 }
