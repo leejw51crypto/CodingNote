@@ -1,0 +1,13 @@
+[package]
+name = "test-mnemonics"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.82"
+bip39 = "2.0.0"
+colored = "2.1.0"
+ethers = "2.0.14"
+rand = "0.8.5"
