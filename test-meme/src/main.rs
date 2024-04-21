@@ -37,11 +37,12 @@ fn main() -> Result<()> {
     // Calculate the font size based on the image height
     let font_size = image.height() as f32 * 0.1;
     let scale = Scale::uniform(font_size);
-    let thickness = (font_size * 0.2) as i32;
+    //let thickness = (font_size * 0.2) as i32;
+    let thickness = 2;
 
     // Split the text into multiple lines based on the maximum width
     let max_width = image.width() as f32 * 0.8;
-    let lines = split_text(&font, scale, &text, max_width);
+    let lines = split_text(&font, scale, &text, max_width)?;
 
     // Calculate the total height of the text
     let line_height = font.v_metrics(scale).ascent - font.v_metrics(scale).descent;
@@ -52,7 +53,7 @@ fn main() -> Result<()> {
 
     // Draw the text with an outline and fill
     for (i, line) in lines.iter().enumerate() {
-        let (line_width, _) = measure_text(&font, scale, line);
+        let (line_width, _) = measure_text(&font, scale, line)?;
         let text_x = (image.width() as f32 - line_width) / 2.0;
         let line_y = text_y + i as f32 * line_height;
 
@@ -64,8 +65,8 @@ fn main() -> Result<()> {
             &font,
             line,
             thickness,
-        );
-        draw_text(&mut image, text_x as i32, line_y as i32, scale, &font, line);
+        )?;
+        draw_text(&mut image, text_x as i32, line_y as i32, scale, &font, line)?;
     }
 
     // Save the modified image
@@ -89,18 +90,21 @@ fn get_user_input(prompt: &str, default: &str) -> Result<String> {
     })
 }
 
-fn measure_text(font: &Font, scale: Scale, text: &str) -> (f32, f32) {
+fn measure_text(font: &Font, scale: Scale, text: &str) -> Result<(f32, f32)> {
     let v_metrics = font.v_metrics(scale);
     let glyphs: Vec<_> = font
         .layout(text, scale, rusttype::point(0.0, v_metrics.ascent))
         .collect();
 
-    let width = glyphs.last().map_or(0.0, |glyph| {
-        glyph.pixel_bounding_box().unwrap().max.x as f32
-    });
+    let width = glyphs.last().map_or(Ok(0.0), |glyph| {
+        glyph
+            .pixel_bounding_box()
+            .map(|bbox| bbox.max.x as f32)
+            .context("Failed to get glyph bounding box")
+    })?;
     let height = v_metrics.ascent - v_metrics.descent;
 
-    (width, height)
+    Ok((width, height))
 }
 
 fn draw_text(
@@ -110,8 +114,8 @@ fn draw_text(
     scale: Scale,
     font: &Font,
     text: &str,
-) {
-    draw_text_with_color(image, x, y, scale, font, text, Rgba([255, 255, 255, 255]));
+) -> Result<()> {
+    draw_text_with_color(image, x, y, scale, font, text, Rgba([255, 255, 255, 255]))
 }
 
 fn draw_text_outline(
@@ -122,7 +126,7 @@ fn draw_text_outline(
     font: &Font,
     text: &str,
     thickness: i32,
-) {
+) -> Result<()> {
     for sy in -thickness..=thickness {
         for sx in -thickness..=thickness {
             if sx.abs() == thickness || sy.abs() == thickness {
@@ -134,10 +138,11 @@ fn draw_text_outline(
                     font,
                     text,
                     Rgba([0, 0, 0, 255]),
-                );
+                )?;
             }
         }
     }
+    Ok(())
 }
 
 fn draw_text_with_color(
@@ -148,7 +153,7 @@ fn draw_text_with_color(
     font: &Font,
     text: &str,
     color: Rgba<u8>,
-) {
+) -> Result<()> {
     let v_metrics = font.v_metrics(scale);
     let glyphs: Vec<_> = font
         .layout(text, scale, rusttype::point(0.0, v_metrics.ascent))
@@ -164,16 +169,17 @@ fn draw_text_with_color(
 
                 if image_x < image.width() && image_y < image.height() {
                     let pixel = image.get_pixel_mut(image_x, image_y);
-                    let alpha = (gv * 255.0) as u8;
-                    let text_color = Rgba([color[0], color[1], color[2], alpha]);
-                    pixel.blend(&text_color);
+                    if gv > 0.5 {
+                        *pixel = color;
+                    }
                 }
             });
         }
     }
+    Ok(())
 }
 
-fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Vec<String> {
+fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Result<Vec<String>> {
     let mut lines = Vec::new();
     let mut current_line = String::new();
 
@@ -184,7 +190,7 @@ fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Vec<Stri
         }
         potential_line.push_str(word);
 
-        let (line_width, _) = measure_text(font, scale, &potential_line);
+        let (line_width, _) = measure_text(font, scale, &potential_line)?;
         if line_width > max_width {
             if !current_line.is_empty() {
                 lines.push(current_line);
@@ -199,5 +205,5 @@ fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Vec<Stri
         lines.push(current_line);
     }
 
-    lines
+    Ok(lines)
 }
