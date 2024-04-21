@@ -44,36 +44,49 @@ fn main() {
     // Create a scale for the font
     let scale = Scale::uniform(font_size);
 
-    // Calculate the text position
-    let (text_width, text_height) = measure_text(&font, scale, &text);
-    let text_x = (image.width() as f32 - text_width) / 2.0;
-    let text_y = image.height() as f32 - text_height - 20.0; // Adjust the vertical position as needed
+    // Split the text into multiple lines based on the maximum width
+    let max_width = image.width() as f32 * 0.8; // Adjust the maximum width as needed
+    let lines = split_text(&font, scale, &text, max_width);
+
+    // Calculate the total height of the text
+    let line_height = font.v_metrics(scale).ascent - font.v_metrics(scale).descent;
+    let total_height = line_height * lines.len() as f32;
+
+    // Calculate the starting position for the text
+    let text_y = image.height() as f32 - total_height - 20.0; // Adjust the vertical position as needed
 
     let thickness = (font_size * 0.2) as i32;
-    for sy in -thickness..thickness {
-        for sx in -thickness..thickness {
-            draw_text_mut(
-                &mut image,
-                Rgba([0, 0, 0, 255]),
-                text_x as i32 + sx,
-                text_y as i32 + sy,
-                scale,
-                &font,
-                &text,
-            );
-        }
-    }
 
-    // Draw the white text
-    draw_text_mut(
-        &mut image,
-        Rgba([255, 255, 255, 255]),
-        text_x as i32,
-        text_y as i32,
-        scale,
-        &font,
-        &text,
-    );
+    for (i, line) in lines.iter().enumerate() {
+        let (line_width, _) = measure_text(&font, scale, line);
+        let text_x = (image.width() as f32 - line_width) / 2.0;
+        let line_y = text_y + i as f32 * line_height;
+
+        for sy in -thickness..thickness {
+            for sx in -thickness..thickness {
+                draw_text_mut(
+                    &mut image,
+                    Rgba([0, 0, 0, 255]),
+                    text_x as i32 + sx,
+                    line_y as i32 + sy,
+                    scale,
+                    &font,
+                    line,
+                );
+            }
+        }
+
+        // Draw the white text
+        draw_text_mut(
+            &mut image,
+            Rgba([255, 255, 255, 255]),
+            text_x as i32,
+            line_y as i32,
+            scale,
+            &font,
+            line,
+        );
+    }
 
     // Save the modified image
     image.save(&output_image).unwrap();
@@ -122,4 +135,33 @@ fn draw_text_mut(
             });
         }
     }
+}
+
+fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current_line = String::new();
+
+    for word in text.split_whitespace() {
+        let mut potential_line = current_line.clone();
+        if !potential_line.is_empty() {
+            potential_line.push(' ');
+        }
+        potential_line.push_str(word);
+
+        let (line_width, _) = measure_text(font, scale, &potential_line);
+        if line_width > max_width {
+            if !current_line.is_empty() {
+                lines.push(current_line);
+            }
+            current_line = word.to_string();
+        } else {
+            current_line = potential_line;
+        }
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
 }
