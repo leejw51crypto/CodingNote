@@ -35,10 +35,12 @@ fn main() -> Result<()> {
     let font = Font::try_from_bytes(font_data).with_context(|| "Failed to load font")?;
 
     // Calculate the font size based on the image height
-    let font_size = image.height() as f32 * 0.1;
+    let font_size = image.height() as f32 * 0.06;
     let scale = Scale::uniform(font_size);
-    //let thickness = (font_size * 0.2) as i32;
-    let thickness = 2;
+    let mut thickness = (font_size * 0.05) as i32;
+    if thickness < 2 {
+        thickness = 2;
+    }
 
     // Split the text into multiple lines based on the maximum width
     let max_width = image.width() as f32 * 0.8;
@@ -168,15 +170,30 @@ fn draw_text_with_color(
                 let image_y = gy as u32;
 
                 if image_x < image.width() && image_y < image.height() {
-                    let pixel = image.get_pixel_mut(image_x, image_y);
-                    if gv > 0.5 {
-                        *pixel = color;
-                    }
+                    let background_pixel = image.get_pixel(image_x, image_y);
+                    let alpha = (gv * color.channels()[3] as f32) as u8;
+                    let blended_pixel = alpha_blend(background_pixel, color, alpha);
+                    image.put_pixel(image_x, image_y, blended_pixel);
                 }
             });
         }
     }
     Ok(())
+}
+
+fn alpha_blend(background: &Rgba<u8>, foreground: Rgba<u8>, alpha: u8) -> Rgba<u8> {
+    let alpha_f = alpha as f32 / 255.0;
+    let inv_alpha_f = 1.0 - alpha_f;
+
+    let mut blended_pixel = Rgba([0, 0, 0, 0]);
+    for i in 0..3 {
+        blended_pixel.channels_mut()[i] = (background.channels()[i] as f32 * inv_alpha_f
+            + foreground.channels()[i] as f32 * alpha_f)
+            as u8;
+    }
+    blended_pixel.channels_mut()[3] = 255;
+
+    blended_pixel
 }
 
 fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Result<Vec<String>> {
