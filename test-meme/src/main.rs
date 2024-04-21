@@ -13,7 +13,7 @@ fn main() -> Result<()> {
     )?;
 
     // Read meme text from the user
-    let text = get_user_input(
+    let text = get_user_input_multiple(
         "Enter the meme text (default: Your meme text here):",
         "Your meme text here",
     )?;
@@ -89,6 +89,31 @@ fn get_user_input(prompt: &str, default: &str) -> Result<String> {
         default.to_string()
     } else {
         input.to_string()
+    })
+}
+
+fn get_user_input_multiple(prompt: &str, default: &str) -> Result<String> {
+    println!("{}", prompt);
+    println!("Enter an empty line to finish.");
+
+    let mut lines = Vec::new();
+    loop {
+        let mut line = String::new();
+        io::stdin().read_line(&mut line)?;
+        let line = line.trim();
+
+        if line.is_empty() {
+            break;
+        }
+        lines.push(line.to_string());
+    }
+
+    let input = lines.join("\n");
+
+    Ok(if input.is_empty() {
+        default.to_string()
+    } else {
+        input
     })
 }
 
@@ -198,28 +223,38 @@ fn alpha_blend(background: &Rgba<u8>, foreground: Rgba<u8>, alpha: u8) -> Rgba<u
 
 fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Result<Vec<String>> {
     let mut lines = Vec::new();
-    let mut current_line = String::new();
 
-    for word in text.split_whitespace() {
-        let mut potential_line = current_line.clone();
-        if !potential_line.is_empty() {
-            potential_line.push(' ');
-        }
-        potential_line.push_str(word);
+    for paragraph in text.split("\n\n") {
+        for line in paragraph.split('\n') {
+            let mut current_line = String::new();
 
-        let (line_width, _) = measure_text(font, scale, &potential_line)?;
-        if line_width > max_width {
+            for word in line.split_whitespace() {
+                let mut potential_line = current_line.clone();
+                if !potential_line.is_empty() {
+                    potential_line.push(' ');
+                }
+                potential_line.push_str(word);
+
+                let (line_width, _) = measure_text(font, scale, &potential_line)?;
+                if line_width > max_width {
+                    if !current_line.is_empty() {
+                        lines.push(current_line);
+                    }
+                    current_line = word.to_string();
+                } else {
+                    current_line = potential_line;
+                }
+            }
+
             if !current_line.is_empty() {
                 lines.push(current_line);
             }
-            current_line = word.to_string();
-        } else {
-            current_line = potential_line;
         }
-    }
 
-    if !current_line.is_empty() {
-        lines.push(current_line);
+        // Add an empty line only if there was an empty line in the input text
+        if paragraph.ends_with("\n\n") {
+            lines.push(String::new());
+        }
     }
 
     Ok(lines)
