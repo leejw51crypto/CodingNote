@@ -1,51 +1,46 @@
+use anyhow::{Context, Result};
+use image::io::Reader as ImageReader;
 use image::Pixel;
 use image::{ImageBuffer, Rgba};
 use rusttype::{Font, Scale};
-use text_io::read;
+use std::io::{self, Write};
 
-fn main() {
+fn main() -> Result<()> {
     // Read input image name from the user
-    println!("Enter the input image name (default: myimage.jpg):");
-    let input_image: String = read!("{}\n");
-    let input_image = if input_image.is_empty() {
-        "myimage.jpg".to_string()
-    } else {
-        input_image
-    };
+    let input_image = get_user_input(
+        "Enter the input image name (default: myimage.jpg):",
+        "myimage.jpg",
+    )?;
 
     // Read meme text from the user
-    println!("Enter the meme text (default: Your meme text here):");
-    let text: String = read!("{}\n");
-    let text = if text.is_empty() {
-        "Your meme text here".to_string()
-    } else {
-        text
-    };
+    let text = get_user_input(
+        "Enter the meme text (default: Your meme text here):",
+        "Your meme text here",
+    )?;
 
     // Read output image name from the user
-    println!("Enter the output image name (default: meme.png):");
-    let output_image: String = read!("{}\n");
-    let output_image = if output_image.is_empty() {
-        "meme.png".to_string()
-    } else {
-        output_image
-    };
+    let output_image = get_user_input(
+        "Enter the output image name (default: meme.png):",
+        "meme.png",
+    )?;
 
     // Load the image file
-    let mut image = image::open(&input_image).unwrap().to_rgba8();
+    let mut image = ImageReader::open(&input_image)
+        .with_context(|| format!("Failed to open image file: {}", input_image))?
+        .decode()?
+        .to_rgba8();
 
     // Load the font file
     let font_data = include_bytes!("myfont.ttf");
-    let font = Font::try_from_bytes(font_data).unwrap();
+    let font = Font::try_from_bytes(font_data).with_context(|| "Failed to load font")?;
 
     // Calculate the font size based on the image height
     let font_size = image.height() as f32 * 0.1;
-
-    // Create a scale for the font
     let scale = Scale::uniform(font_size);
+    let thickness = (font_size * 0.2) as i32;
 
     // Split the text into multiple lines based on the maximum width
-    let max_width = image.width() as f32 * 0.8; // Adjust the maximum width as needed
+    let max_width = image.width() as f32 * 0.8;
     let lines = split_text(&font, scale, &text, max_width);
 
     // Calculate the total height of the text
@@ -53,43 +48,45 @@ fn main() {
     let total_height = line_height * lines.len() as f32;
 
     // Calculate the starting position for the text
-    let text_y = image.height() as f32 - total_height - 20.0; // Adjust the vertical position as needed
+    let text_y = image.height() as f32 - total_height - 20.0;
 
-    let thickness = (font_size * 0.2) as i32;
-
+    // Draw the text with an outline and fill
     for (i, line) in lines.iter().enumerate() {
         let (line_width, _) = measure_text(&font, scale, line);
         let text_x = (image.width() as f32 - line_width) / 2.0;
         let line_y = text_y + i as f32 * line_height;
 
-        for sy in -thickness..thickness {
-            for sx in -thickness..thickness {
-                draw_text_mut(
-                    &mut image,
-                    Rgba([0, 0, 0, 255]),
-                    text_x as i32 + sx,
-                    line_y as i32 + sy,
-                    scale,
-                    &font,
-                    line,
-                );
-            }
-        }
-
-        // Draw the white text
-        draw_text_mut(
+        draw_text_outline(
             &mut image,
-            Rgba([255, 255, 255, 255]),
             text_x as i32,
             line_y as i32,
             scale,
             &font,
             line,
+            thickness,
         );
+        draw_text(&mut image, text_x as i32, line_y as i32, scale, &font, line);
     }
 
     // Save the modified image
-    image.save(&output_image).unwrap();
+    image.save(&output_image)?;
+
+    Ok(())
+}
+
+fn get_user_input(prompt: &str, default: &str) -> Result<String> {
+    print!("{}", prompt);
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let input = input.trim();
+
+    Ok(if input.is_empty() {
+        default.to_string()
+    } else {
+        input.to_string()
+    })
 }
 
 fn measure_text(font: &Font, scale: Scale, text: &str) -> (f32, f32) {
@@ -98,20 +95,59 @@ fn measure_text(font: &Font, scale: Scale, text: &str) -> (f32, f32) {
         .layout(text, scale, rusttype::point(0.0, v_metrics.ascent))
         .collect();
 
-    let width = glyphs.last().unwrap().pixel_bounding_box().unwrap().max.x as f32;
+    let width = glyphs.last().map_or(0.0, |glyph| {
+        glyph.pixel_bounding_box().unwrap().max.x as f32
+    });
     let height = v_metrics.ascent - v_metrics.descent;
 
     (width, height)
 }
 
-fn draw_text_mut(
+fn draw_text(
     image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
-    color: Rgba<u8>,
     x: i32,
     y: i32,
     scale: Scale,
     font: &Font,
     text: &str,
+) {
+    draw_text_with_color(image, x, y, scale, font, text, Rgba([255, 255, 255, 255]));
+}
+
+fn draw_text_outline(
+    image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+    x: i32,
+    y: i32,
+    scale: Scale,
+    font: &Font,
+    text: &str,
+    thickness: i32,
+) {
+    for sy in -thickness..=thickness {
+        for sx in -thickness..=thickness {
+            if sx.abs() == thickness || sy.abs() == thickness {
+                draw_text_with_color(
+                    image,
+                    x + sx,
+                    y + sy,
+                    scale,
+                    font,
+                    text,
+                    Rgba([0, 0, 0, 255]),
+                );
+            }
+        }
+    }
+}
+
+fn draw_text_with_color(
+    image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+    x: i32,
+    y: i32,
+    scale: Scale,
+    font: &Font,
+    text: &str,
+    color: Rgba<u8>,
 ) {
     let v_metrics = font.v_metrics(scale);
     let glyphs: Vec<_> = font
