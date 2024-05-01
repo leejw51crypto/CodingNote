@@ -52,3 +52,6 @@ a.out
 *.png
 *.doc
 test-meme/src/myfont.ttf
+*.png
+*.jpeg
+*.jpg
