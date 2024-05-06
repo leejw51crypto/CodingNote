@@ -10,4 +10,5 @@ anyhow = "1.0.81"
 chrono = "0.4.37"
 fake = "2.9.2"
 gluesql = "0.15.0"
+hex = "0.4.3"
 tokio = { version = "1.37.0", features = ["full"] }
