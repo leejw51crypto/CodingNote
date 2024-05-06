@@ -3,3 +3,6 @@ all:
 
 option:
 	cargo run --example option
+
+bytes:
+	cargo run --example bytes
