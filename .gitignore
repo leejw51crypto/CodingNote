@@ -57,3 +57,4 @@ test-meme/src/myfont.ttf
 *.jpg
 *.csv
 *.sql
+*.db

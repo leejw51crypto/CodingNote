@@ -1,0 +1,13 @@
+[package]
+name = "test-sqlite"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.83"
+fake = "2.9.2"
+rusqlite = "0.31.0"
+tokio = { version = "1.37.0", features = ["full"] }
+tracing = "0.1.40"
