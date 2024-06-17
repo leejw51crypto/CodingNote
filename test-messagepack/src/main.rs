@@ -26,6 +26,28 @@ struct Item {
     info: ItemInfo,
 }
 
+fn use_msgpack_encoded(msgpack_encoded: &[u8]) -> Result<()> {
+    // Deserialize MessagePack-encoded data into a serde_json::Value
+    let mut reader = std::io::Cursor::new(msgpack_encoded);
+    let value: serde_json::Value = rmp_serde::from_read(&mut reader)?;
+
+    // Access the deserialized data as a serde_json::Value
+    println!("Deserialized MessagePack data: {}", value);
+
+    // You can access specific fields using the serde_json::Value API
+    if let Some(name) = value.get("name") {
+        println!("Name: {}", name);
+    }
+
+    if let Some(price) = value.get("price") {
+        println!("Price: {}", price);
+    }
+
+    // ... (access other fields as needed)
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let items: Vec<Item> = (0..10)
         .map(|_| {
@@ -57,6 +79,7 @@ fn main() -> Result<()> {
         let json2 = serde_json::to_string(&msgpack_decoded)?;
         println!("MessagePack decoded: {:?}", msgpack_decoded);
         println!("JSON encoded from MessagePack: {}", json2);
+        use_msgpack_encoded(&msgpack_encoded)?;
 
         println!();
     }
