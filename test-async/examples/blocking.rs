@@ -1,9 +1,11 @@
+use anyhow::Result;
 use std::io::{self, Write};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+use tokio::task;
 
-fn blocking_call(command_receiver: mpsc::Receiver<String>) {
+fn blocking_call(command_receiver: mpsc::Receiver<String>) -> Result<()> {
     println!("Blocking call started");
     loop {
         // Perform some work without yielding
@@ -18,14 +20,16 @@ fn blocking_call(command_receiver: mpsc::Receiver<String>) {
             }
         }
     }
+    Ok(())
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     let (command_sender, command_receiver) = mpsc::channel();
 
-    // Spawn a new thread for the blocking call
-    let blocking_thread = thread::spawn(move || {
-        blocking_call(command_receiver);
+    // Spawn a new thread for the blocking call using `task::spawn_blocking`
+    let blocking_thread = task::spawn_blocking(move || {
+        blocking_call(command_receiver)
     });
 
     println!("Enter commands ('quit' to exit):");
@@ -33,23 +37,24 @@ fn main() {
     loop {
         // Read user input
         print!("> ");
-        io::stdout().flush().unwrap();
+        io::stdout().flush()?;
         let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input)?;
         let command = input.trim().to_lowercase();
 
         // Send the command to the blocking thread
-        command_sender.send(command.clone()).unwrap();
+        command_sender.send(command.clone())?;
 
         // Check if the user entered the "quit" command
         if command == "quit" {
-            println!("Main thread received quit command. Waiting for threads to finish...");
+            println!("Main task received quit command. Waiting for tasks to finish...");
             break;
         }
     }
 
     // Wait for the blocking thread to finish
-    blocking_thread.join().unwrap();
+    blocking_thread.await??;
 
-    println!("All threads finished. Exiting...");
+    println!("All tasks finished. Exiting...");
+    Ok(())
 }
