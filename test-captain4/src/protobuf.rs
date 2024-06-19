@@ -24,7 +24,7 @@ fn encode_fruit() -> Result<Vec<u8>> {
     let buf = fruit.encode_to_vec();
     let end_time = Utc::now();
     let encoding_time = end_time - start_time;
-    println!("Encoding time: {} ms", encoding_time.num_milliseconds());
+    println!("Encoding time: {} micro-seconds", encoding_time.num_microseconds().unwrap());
 
     Ok(buf)
 }
@@ -34,7 +34,7 @@ fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
     let fruit = Fruit::decode(encoded_message)?;
     let end_time = Utc::now();
     let decoding_time = end_time - start_time;
-    println!("Decoding time: {} ms", decoding_time.num_milliseconds());
+    println!("Decoding time: {} micro-seconds", decoding_time.num_microseconds().unwrap());
 
     println!("Name: {}", fruit.name);
     println!("Weight: {}", fruit.weight);

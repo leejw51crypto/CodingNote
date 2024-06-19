@@ -1,6 +1,6 @@
 use anyhow::Result;
 use capnp::message::{Builder, ReaderOptions};
-use capnp::serialize;
+use capnp::serialize_packed;
 use chrono::Utc;
 pub mod fruit_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/fruit_capnp.rs"));
@@ -27,11 +27,11 @@ fn encode_fruit() -> Result<Vec<u8>> {
 
     let mut encoded_message = Vec::new();
     let start_time = Utc::now();
-    serialize::write_message(&mut encoded_message, &message)?;
+    serialize_packed::write_message(&mut encoded_message, &message)?;
     let end_time = Utc::now();
     let encoding_time = end_time - start_time;
 
-    println!("Encoding time: {} ms", encoding_time.num_milliseconds());
+    println!("Encoding time: {} micro-seconds", encoding_time.num_microseconds().unwrap());
 
     Ok(encoded_message)
 }
@@ -39,14 +39,14 @@ fn encode_fruit() -> Result<Vec<u8>> {
 fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
     let start_time = Utc::now();
 
-    let reader = serialize::read_message(&mut &encoded_message[..], ReaderOptions::new())?;
+    let reader = serialize_packed::read_message(&mut &encoded_message[..], ReaderOptions::new())?;
 
     let fruit = reader.get_root::<fruit_capnp::fruit::Reader>()?;
     let end_time = Utc::now();
 
     let decoding_time = end_time - start_time;
 
-    println!("Decoding time: {} ms", decoding_time.num_milliseconds());
+    println!("Decoding time: {} micro-seconds", decoding_time.num_microseconds().unwrap());
 
     println!("Name: {}", fruit.get_name()?.to_string()?);
     println!("Weight: {}", fruit.get_weight());
@@ -66,6 +66,7 @@ fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
 pub fn main() -> Result<()> {
     let encoded_message = encode_fruit()?;
     println!("{} bytes", encoded_message.len());
+    //println!("{}", hex::encode(&encoded_message));
     decode_fruit(&encoded_message)?;
 
     Ok(())
