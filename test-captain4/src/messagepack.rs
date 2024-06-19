@@ -1,7 +1,7 @@
 use anyhow::Result;
+use chrono::Utc;
 use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
-use chrono::Utc;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Fruit {
@@ -22,7 +22,6 @@ struct Fruit2 {
 fn encode_fruit() -> Result<Vec<u8>> {
     let large_data_size = 10 * 1024 * 1024; // 10 MB
     let mut large_data = vec![0u8; large_data_size];
- 
 
     let fruit = Fruit {
         name: "Apple".to_string(),
@@ -32,13 +31,21 @@ fn encode_fruit() -> Result<Vec<u8>> {
         large_data,
     };
 
+    let start_time = Utc::now();
     let buf = rmp_serde::encode::to_vec(&fruit)?;
+    let end_time = Utc::now();
+    let encoding_time = end_time - start_time;
+    println!("Encoding time: {} ms", encoding_time.num_milliseconds());
 
     Ok(buf)
 }
 
 fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
+    let start_time = Utc::now();
     let fruit: Fruit = rmp_serde::from_slice(encoded_message)?;
+    let end_time = Utc::now();
+    let decoding_time = end_time - start_time;
+    println!("Decoding time: {} ms", decoding_time.num_milliseconds());
 
     println!("Name: {}", fruit.name);
     println!("Weight: {}", fruit.weight);
@@ -54,21 +61,13 @@ fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
 
 pub fn main() -> Result<()> {
     println!("messagepack");
-    let mut start_time = Utc::now();
-    let encoded_message: Vec<u8> = encode_fruit()?;
-    let mut end_time = Utc::now();
-    let encoding_time = end_time - start_time;
-    println!("Encoding time: {} ms", encoding_time.num_milliseconds());
 
+    let encoded_message: Vec<u8> = encode_fruit()?;
 
     println!("{} bytes", encoded_message.len());
     //println!("hex {}", hex::encode(&encoded_message));
 
-    start_time= Utc::now();
     decode_fruit(&encoded_message)?;
-    end_time = Utc::now();
-    let decoding_time = end_time - start_time;
-    println!("Decoding time: {} ms", decoding_time.num_milliseconds());
 
     let value: Fruit = rmp_serde::from_slice(&encoded_message)?;
     //println!("decoded2 {}", serde_json::to_string_pretty(&value)?,);
