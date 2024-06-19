@@ -4,6 +4,7 @@ use capnp::serialize;
 use chrono::Utc;
 
 pub mod messagepack;
+pub mod protobuf;
 pub mod fruit_capnp {
     include!(concat!(env!("OUT_DIR"), "/proto/fruit_capnp.rs"));
 }
@@ -22,12 +23,8 @@ fn encode_fruit() -> Result<Vec<u8>> {
         colors.set(1, "Green");
 
         // Generate large data for stress testing
-        let large_data_size = 10 * 1024 * 1024; // 10 MB
-        let mut large_data = vec![0u8; large_data_size];
-        // Fill the large_data array with some dummy values
-        for i in 0..large_data_size {
-            large_data[i] = (i % 256) as u8;
-        }
+        let large_data_size = 50 * 1024 * 1024; // 10 MB
+        let large_data = vec![0u8; large_data_size];
         fruit.set_large_data(&large_data);
     }
 
@@ -44,9 +41,12 @@ fn encode_fruit() -> Result<Vec<u8>> {
 
 fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
     let start_time = Utc::now();
+
     let reader = serialize::read_message(&mut &encoded_message[..], ReaderOptions::new())?;
+
     let fruit = reader.get_root::<fruit_capnp::fruit::Reader>()?;
     let end_time = Utc::now();
+
     let decoding_time = end_time - start_time;
 
     println!("Decoding time: {} ms", decoding_time.num_milliseconds());
@@ -69,9 +69,11 @@ fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
 fn main() -> Result<()> {
     let encoded_message = encode_fruit()?;
     println!("{} bytes", encoded_message.len());
-    //println!("hex {}", hex::encode(&encoded_message));
     decode_fruit(&encoded_message)?;
 
+    println!("----------------------");
     crate::messagepack::main()?;
+    println!("----------------------");
+    crate::protobuf::main()?;
     Ok(())
 }

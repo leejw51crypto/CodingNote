@@ -1,22 +1,12 @@
 use anyhow::Result;
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use prost::Message;
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Fruit {
-    name: String,
-    weight: u16,
-    is_ripe: bool,
-    colors: Vec<String>,
-    large_data: Vec<u8>,
+pub mod myproto {
+    include!(concat!(env!("OUT_DIR"), "/myproto.rs"));
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Fruit2 {
-    name: String,
-    weight: u16,
-    is_ripe: bool,
-}
+use myproto::Fruit;
 
 fn encode_fruit() -> Result<Vec<u8>> {
     let large_data_size = 50 * 1024 * 1024; // 10 MB
@@ -31,7 +21,7 @@ fn encode_fruit() -> Result<Vec<u8>> {
     };
 
     let start_time = Utc::now();
-    let buf = rmp_serde::encode::to_vec(&fruit)?;
+    let buf = fruit.encode_to_vec();
     let end_time = Utc::now();
     let encoding_time = end_time - start_time;
     println!("Encoding time: {} ms", encoding_time.num_milliseconds());
@@ -41,7 +31,7 @@ fn encode_fruit() -> Result<Vec<u8>> {
 
 fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
     let start_time = Utc::now();
-    let fruit: Fruit = rmp_serde::from_slice(encoded_message)?;
+    let fruit = Fruit::decode(encoded_message)?;
     let end_time = Utc::now();
     let decoding_time = end_time - start_time;
     println!("Decoding time: {} ms", decoding_time.num_milliseconds());
@@ -59,7 +49,7 @@ fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
 }
 
 pub fn main() -> Result<()> {
-    println!("messagepack");
+    println!("protobuf");
 
     let encoded_message: Vec<u8> = encode_fruit()?;
 

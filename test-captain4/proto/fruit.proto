@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package myproto;
+
+message Fruit {
+  string name = 1;
+  uint32 weight = 2;
+  bool is_ripe = 3;
+  repeated string colors = 4;
+  bytes large_data = 5;
+}
+
+message Fruit2 {
+  string name = 1;
+  uint32 weight = 2;
+  bool is_ripe = 3;
+}
