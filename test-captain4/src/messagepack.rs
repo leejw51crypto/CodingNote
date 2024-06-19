@@ -19,7 +19,7 @@ struct Fruit2 {
 }
 
 fn encode_fruit() -> Result<Vec<u8>> {
-    let large_data_size = 50 * 1024 * 1024; // 10 MB
+    let large_data_size = crate::definition::TEST_SIZE; 
     let large_data = vec![0u8; large_data_size];
 
     let fruit = Fruit {
