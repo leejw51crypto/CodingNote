@@ -63,7 +63,11 @@ pub fn main() -> Result<()> {
 
     let encoded_message: Vec<u8> = encode_fruit()?;
 
+
     println!("{} bytes", encoded_message.len());
+    if crate::definition::DISPLAY_HEX {
+        println!("{}", hex::encode(&encoded_message));
+    }
 
     decode_fruit(&encoded_message)?;
 

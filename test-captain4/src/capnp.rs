@@ -66,7 +66,10 @@ fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
 pub fn main() -> Result<()> {
     let encoded_message = encode_fruit()?;
     println!("{} bytes", encoded_message.len());
-    //println!("{}", hex::encode(&encoded_message));
+    if crate::definition::DISPLAY_HEX {
+        println!("{}", hex::encode(&encoded_message));
+    }
+    
     decode_fruit(&encoded_message)?;
 
     Ok(())

@@ -1,3 +1,3 @@
 
-pub const TEST_SIZE: usize = 10*1024*1024;
-//pub const TEST_SIZE: usize = 8;
+pub const TEST_SIZE: usize = 16*1000*1000;
+pub const DISPLAY_HEX: bool = false;
