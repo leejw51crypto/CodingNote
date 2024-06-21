@@ -70,6 +70,7 @@ fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
 }
 
 pub fn main() -> Result<()> {
+    println!("capnp");
     let encoded_message = encode_fruit()?;
     println!("{} bytes", encoded_message.len());
     if crate::definition::DISPLAY_HEX {
