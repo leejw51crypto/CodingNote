@@ -20,7 +20,7 @@ fn encode_fruit() -> Result<Vec<u8>> {
         colors.set(1, "Green");
 
         // Generate large data for stress testing
-        let large_data_size = crate::definition::TEST_SIZE; 
+        let large_data_size = crate::definition::TEST_SIZE;
         let large_data = vec![0u8; large_data_size];
         fruit.set_large_data(&large_data);
     }
@@ -31,7 +31,10 @@ fn encode_fruit() -> Result<Vec<u8>> {
     let end_time = Utc::now();
     let encoding_time = end_time - start_time;
 
-    println!("Encoding time: {} micro-seconds", encoding_time.num_microseconds().unwrap());
+    println!(
+        "Encoding time: {} micro-seconds",
+        encoding_time.num_microseconds().unwrap()
+    );
 
     Ok(encoded_message)
 }
@@ -46,7 +49,10 @@ fn decode_fruit(encoded_message: &[u8]) -> Result<()> {
 
     let decoding_time = end_time - start_time;
 
-    println!("Decoding time: {} micro-seconds", decoding_time.num_microseconds().unwrap());
+    println!(
+        "Decoding time: {} micro-seconds",
+        decoding_time.num_microseconds().unwrap()
+    );
 
     println!("Name: {}", fruit.get_name()?.to_string()?);
     println!("Weight: {}", fruit.get_weight());
@@ -69,7 +75,7 @@ pub fn main() -> Result<()> {
     if crate::definition::DISPLAY_HEX {
         println!("{}", hex::encode(&encoded_message));
     }
-    
+
     decode_fruit(&encoded_message)?;
 
     Ok(())
