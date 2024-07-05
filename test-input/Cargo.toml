@@ -1,0 +1,8 @@
+[package]
+name = "test-input"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustyline = "14.0.0"
+text_io = "0.1.12"
