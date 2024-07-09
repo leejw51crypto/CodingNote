@@ -5,5 +5,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.79"
+bip39 = "2.0.0"
 ecies = { version = "0.2", default-features = false, features = ["pure","std"] }
+ethers = "2.0.14"
 hex = "0.4.3"
+k256 = "0.13.3"

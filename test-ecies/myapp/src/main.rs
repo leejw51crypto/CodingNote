@@ -1,5 +1,5 @@
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    myengine::process().await;
+    myengine::process().await?;
     Ok(())
 }
