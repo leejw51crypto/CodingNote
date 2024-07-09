@@ -1,0 +1,9 @@
+[package]
+name = "myengine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.79"
+ecies = { version = "0.2", default-features = false, features = ["pure","std"] }
+hex = "0.4.3"
