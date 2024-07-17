@@ -258,20 +258,38 @@ fn alpha_blend(background: &Rgba<u8>, foreground: Rgba<u8>, alpha: u8) -> Rgba<u
 
 fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Result<Vec<String>> {
     let mut lines = Vec::new();
+
+    // Calculate maximum width for a single line
+    let max_line_width = max_width * 0.9; // Using 90% of the image width
+
     for paragraph in text.split("\n\n") {
         for line in paragraph.split('\n') {
             let mut current_line = String::new();
             for word in line.split_whitespace() {
-                if word.len() > 30 {
-                    // Increased from 20 to 30
-                    let chars: Vec<char> = word.chars().collect();
-                    for chunk in chars.chunks(30) {
-                        let chunk_str: String = chunk.iter().collect();
-                        if !current_line.is_empty() {
-                            lines.push(current_line);
-                            current_line = String::new();
+                let (word_width, _) = measure_text(font, scale, word)?;
+
+                if word_width > max_line_width {
+                    // If the word itself is longer than max_line_width, split it
+                    if !current_line.is_empty() {
+                        lines.push(current_line);
+                        current_line = String::new();
+                    }
+
+                    let mut char_line = String::new();
+                    for ch in word.chars() {
+                        let potential_line = char_line.clone() + &ch.to_string();
+                        let (potential_width, _) = measure_text(font, scale, &potential_line)?;
+
+                        if potential_width > max_line_width {
+                            lines.push(char_line);
+                            char_line = ch.to_string();
+                        } else {
+                            char_line.push(ch);
                         }
-                        lines.push(chunk_str);
+                    }
+
+                    if !char_line.is_empty() {
+                        lines.push(char_line);
                     }
                 } else {
                     let mut potential_line = current_line.clone();
@@ -281,7 +299,7 @@ fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Result<V
                     potential_line.push_str(word);
 
                     let (line_width, _) = measure_text(font, scale, &potential_line)?;
-                    if line_width > max_width {
+                    if line_width > max_line_width {
                         if !current_line.is_empty() {
                             lines.push(current_line);
                         }
@@ -301,7 +319,6 @@ fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Result<V
     }
     Ok(lines)
 }
-
 // Add this new function to print the generated meme
 fn print_generated_meme(image_path: &str) -> Result<()> {
     let conf = Config {
