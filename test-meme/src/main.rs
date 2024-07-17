@@ -4,6 +4,7 @@ use image::Pixel;
 use image::{ImageBuffer, Rgba};
 use rusttype::{Font, Scale};
 use std::io::{self, Write};
+use viuer::{print_from_file, Config};
 
 fn main() -> Result<()> {
     // Read input image name from the user
@@ -34,24 +35,55 @@ fn main() -> Result<()> {
     let font_data = include_bytes!("myfont.ttf");
     let font = Font::try_from_bytes(font_data).with_context(|| "Failed to load font")?;
 
-    // Calculate the font size based on the image height
-    let font_size = image.height() as f32 * 0.06;
+    // Calculate the initial font size based on the image height
+    let initial_font_size = image.height() as f32 * 0.2;
+    let initial_scale = Scale::uniform(initial_font_size);
+
+    // Split the text into multiple lines based on the maximum width
+    let max_width = image.width() as f32 * 0.9;
+    let mut lines = split_text(&font, initial_scale, &text, max_width)?;
+
+    // Adjust font size based on the number of lines
+    let font_size = if lines.len() > 5 {
+        let scale_factor = (5.0 / lines.len() as f32).max(0.5);
+        image.height() as f32 * 0.2 * scale_factor
+    } else {
+        initial_font_size
+    };
+
     let scale = Scale::uniform(font_size);
     let mut thickness = (font_size * 0.05) as i32;
     if thickness < 2 {
         thickness = 2;
     }
 
-    // Split the text into multiple lines based on the maximum width
-    let max_width = image.width() as f32 * 0.8;
-    let lines = split_text(&font, scale, &text, max_width)?;
+    // Recalculate lines with the new font size
+    lines = split_text(&font, scale, &text, max_width)?;
 
     // Calculate the total height of the text
     let line_height = font.v_metrics(scale).ascent - font.v_metrics(scale).descent;
     let total_height = line_height * lines.len() as f32;
 
     // Calculate the starting position for the text
-    let text_y = image.height() as f32 - total_height - 20.0;
+    let text_y = if lines.len() > 10 {
+        image.height() as f32 * 0.1 // Start higher for very long text
+    } else {
+        image.height() as f32 - total_height - 20.0 // Original position
+    };
+
+    // Handle overflow
+    let max_lines = (image.height() as f32 / line_height) as usize - 2; // Leave some margin
+    if lines.len() > max_lines {
+        lines.truncate(max_lines);
+        if let Some(last) = lines.last_mut() {
+            let mut chars: Vec<char> = last.chars().collect();
+            if chars.len() > 3 {
+                chars.truncate(chars.len() - 3);
+                chars.extend(['.', '.', '.']);
+                *last = chars.into_iter().collect();
+            }
+        }
+    }
 
     // Draw the text with an outline and fill
     for (i, line) in lines.iter().enumerate() {
@@ -73,6 +105,9 @@ fn main() -> Result<()> {
 
     // Save the modified image
     image.save(&output_image)?;
+
+    // Print the generated meme image
+    print_generated_meme(&output_image)?;
 
     Ok(())
 }
@@ -223,39 +258,59 @@ fn alpha_blend(background: &Rgba<u8>, foreground: Rgba<u8>, alpha: u8) -> Rgba<u
 
 fn split_text(font: &Font, scale: Scale, text: &str, max_width: f32) -> Result<Vec<String>> {
     let mut lines = Vec::new();
-
     for paragraph in text.split("\n\n") {
         for line in paragraph.split('\n') {
             let mut current_line = String::new();
-
             for word in line.split_whitespace() {
-                let mut potential_line = current_line.clone();
-                if !potential_line.is_empty() {
-                    potential_line.push(' ');
-                }
-                potential_line.push_str(word);
-
-                let (line_width, _) = measure_text(font, scale, &potential_line)?;
-                if line_width > max_width {
-                    if !current_line.is_empty() {
-                        lines.push(current_line);
+                if word.len() > 30 {
+                    // Increased from 20 to 30
+                    let chars: Vec<char> = word.chars().collect();
+                    for chunk in chars.chunks(30) {
+                        let chunk_str: String = chunk.iter().collect();
+                        if !current_line.is_empty() {
+                            lines.push(current_line);
+                            current_line = String::new();
+                        }
+                        lines.push(chunk_str);
                     }
-                    current_line = word.to_string();
                 } else {
-                    current_line = potential_line;
+                    let mut potential_line = current_line.clone();
+                    if !potential_line.is_empty() {
+                        potential_line.push(' ');
+                    }
+                    potential_line.push_str(word);
+
+                    let (line_width, _) = measure_text(font, scale, &potential_line)?;
+                    if line_width > max_width {
+                        if !current_line.is_empty() {
+                            lines.push(current_line);
+                        }
+                        current_line = word.to_string();
+                    } else {
+                        current_line = potential_line;
+                    }
                 }
             }
-
             if !current_line.is_empty() {
                 lines.push(current_line);
             }
         }
-
-        // Add an empty line only if there was an empty line in the input text
         if paragraph.ends_with("\n\n") {
             lines.push(String::new());
         }
     }
-
     Ok(lines)
+}
+
+// Add this new function to print the generated meme
+fn print_generated_meme(image_path: &str) -> Result<()> {
+    let conf = Config {
+        width: Some(80),
+        height: Some(15),
+        absolute_offset: false,
+        ..Default::default()
+    };
+
+    print_from_file(image_path, &conf).context("Image printing failed")?;
+    Ok(())
 }
