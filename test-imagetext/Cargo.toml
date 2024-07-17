@@ -1,0 +1,7 @@
+[package]
+name = "test-imagetext"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+viuer = "0.7.1"
