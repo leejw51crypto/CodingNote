@@ -9,6 +9,7 @@ fn main() {
         // set dimensions
         width: Some(80),
         height: Some(25),
+        absolute_offset: false,
         ..Default::default()
     };
 
