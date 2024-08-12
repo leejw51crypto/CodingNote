@@ -71,7 +71,7 @@ export async function main721(
       hash: mintResult.hash.substring(0, 8) + '...',
       nonce: mintResult.nonce,
       chainId: mintResult.chainId,
-      type: mintResult.type,
+      type: mintResult.type, // 0: legay, 1: eip2930, 2: eip 1559
       from: mintResult.from.substring(0, 8) + '...'
       // result: JSON.stringify(mintResult),
     });
@@ -87,41 +87,38 @@ export async function main721(
   let countString = await ask('How many tokens to show? ');
   let count = Number(countString);
 
+  let tokenid=0;
+  // read tokenid from terminal
+  let tokenidString = await ask('tokenid= ');
+  tokenid = Number(tokenidString);
   if (doGame) {
     let startid = 0;
-    const firstowner = await myErc721.ownerOf(0);
-    if (firstowner == signers[0].address) {
-      startid = 0;
+    const firstowner = await myErc721.ownerOf(tokenid);
+    console.log(`first owner= ${firstowner}`);
+    let fromaddress="";
+    let toaddress="";
+    if (firstowner === signers[0].address) {
+      fromaddress = signers[0].address;
+      toaddress = signers[1].address;
     } else {
-      startid = 1;
+      fromaddress = signers[1].address;
+      toaddress = signers[0].address;
     }
-    const targettokenid = BigNumber.from(2);
-    for (let i = startid; i < 2; i++) {
-      console.log(`Loop ${i}`);
-      if (0 == i % 2) {
-        await erc721Transfer(
+    
+    await showErc721(myErc721, count);
+    await erc721Transfer(
           myErc721,
-          signers[0].address,
-          signers[1].address,
-          targettokenid.toString()
-        );
-      } else {
-        await erc721Transfer(
-          myErc721,
-          signers[1].address,
-          signers[0].address,
-          targettokenid.toString()
-        );
-      }
+          fromaddress,
+          toaddress,
+          tokenid.toString()
+     );
+    
       await new Promise((r) => setTimeout(r, 5000));
-      await showErc721(myErc721, count);
-    }
+      await showErc721(myErc721, count);    
   }
 
-  await showErc721(myErc721, count);
-
   const id = await myErc721._tokenIdCounter();
-  console.log(`tokenid= ${id}`);
+  console.log(`current tokenid= ${id}`);
 }
 
 async function showErc721(contract: MyErc721, count: number) {
@@ -138,8 +135,9 @@ async function showErc721(contract: MyErc721, count: number) {
     } catch (e) {
       break;
     }
-    console.table(data);
+    console.log("fetching tokenid=",i);
   }
+  console.table(data);
 }
 
 async function erc721Transfer(
