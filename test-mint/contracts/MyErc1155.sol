@@ -16,4 +16,9 @@ contract MyErc1155 is ERC1155 {
         _mint(msg.sender, DIAMOND, 40004, "diamond");
         _mint(msg.sender, RUBY, 50005, "ruby");
     }
+
+    function burn(address account, uint256 id, uint256 amount) public {
+        require(msg.sender == account, "Only token owner can burn");
+        _burn(account, id, amount);
+    }
 }

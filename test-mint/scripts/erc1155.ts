@@ -48,6 +48,19 @@ async function showErc1155Balances(
   console.table(items, ['TokenID', 'Address', 'Balance']);
 }
 
+
+async function erc1155BurnByTransfer(
+  contract: MyErc1155,
+  from: string,
+  tokenid: string,
+  amount: string
+) {
+  const signerContract = contract.connect(ethers.provider.getSigner(from));
+  // Replace safeTransferFrom with burn function
+  return signerContract.burn(from, tokenid, amount);
+}
+
+
 async function erc1155Transfer(
   contract: MyErc1155,
   from: string,
@@ -108,6 +121,7 @@ export async function main1155(
 
   let fromaddress=signers[0].address;
   let toaddress=signers[1].address;
+  
 
   const gold = await myErc1155.GOLD();
   await showErc1155Balances('GOLD', myErc1155, gold, [
@@ -123,10 +137,10 @@ export async function main1155(
     doGame = true;
   }
   if (doGame) {
-    const trasnferResult = await erc1155Transfer(
+    //const trasnferResult = await erc1155Transfer(
+    const trasnferResult = await erc1155BurnByTransfer(
       myErc1155,
       fromaddress,
-      toaddress,
       gold.toString(),
       '1'
     );
