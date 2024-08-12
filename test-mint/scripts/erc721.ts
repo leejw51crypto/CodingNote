@@ -25,8 +25,7 @@ export async function query721(contractaddress: string | undefined,) {
 }
 
 export async function main721(
-  contractaddress: string | undefined,
-  doGame = false
+  contractaddress: string | undefined
 ) {
   const signers = await ethers.getSigners();
 
@@ -83,16 +82,26 @@ export async function main721(
     await new Promise((r) => setTimeout(r, 5000));
   }
 
+  const tokenCounter = await myErc721._tokenIdCounter();
+  console.log(`Current token counter: ${tokenCounter}`);
+
+
   // read count from terminal
   let countString = await ask('How many tokens to show? ');
   let count = Number(countString);
 
-  let tokenid=0;
-  // read tokenid from terminal
-  let tokenidString = await ask('tokenid= ');
-  tokenid = Number(tokenidString);
+  
+  let doGame = false
+  // ask user, if user enter y, then doGame is true
+  let doGameString = await ask('Do game? (y/n) ');
+  if (doGameString === 'y') {
+    doGame = true;
+  }
   if (doGame) {
-    let startid = 0;
+    let tokenid=0;
+    // read tokenid from terminal
+    let tokenidString = await ask('change owner , tokenid= ');
+    tokenid = Number(tokenidString);
     const firstowner = await myErc721.ownerOf(tokenid);
     console.log(`first owner= ${firstowner}`);
     let fromaddress="";
@@ -113,10 +122,11 @@ export async function main721(
           tokenid.toString()
      );
     
-      await new Promise((r) => setTimeout(r, 5000));
-      await showErc721(myErc721, count);    
+     
   }
 
+  await new Promise((r) => setTimeout(r, 5000));
+  await showErc721(myErc721, count);    
   const id = await myErc721._tokenIdCounter();
   console.log(`current tokenid= ${id}`);
 }

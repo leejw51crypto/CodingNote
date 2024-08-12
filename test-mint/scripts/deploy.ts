@@ -96,9 +96,9 @@ async function main() {
       const signers = await ethers.getSigners();
       await showSigners(signers);
     } else if (answer === '1') {
-      await main721(process.env.MYCONTRACT721,true);
+      await main721(process.env.MYCONTRACT721);
     } else if (answer === '2') {
-      await main1155(process.env.MYCONTRACT1155,true);
+      await main1155(process.env.MYCONTRACT1155);
     } else if (answer === '9') {
       displayEnv();
     } else if (answer==='3') {

@@ -2,7 +2,7 @@ import { ethers } from 'hardhat';
 import { BigNumber } from 'ethers';
 import { MyErc1155 } from '../typechain-types';
 import { showSigners } from './util';
-
+import { ask } from './util';
 export let Erc1155ContractAddress: string | undefined;
 
 
@@ -43,8 +43,9 @@ async function showErc1155Balances(
       Balance: goldBalance
     };
     items.push(item);
-    console.table(items, ['TokenID', 'Address', 'Balance']);
+    console.log(`fetching balance for tokenid=${tokenid} address=${address}`);
   }
+  console.table(items, ['TokenID', 'Address', 'Balance']);
 }
 
 async function erc1155Transfer(
@@ -60,8 +61,7 @@ async function erc1155Transfer(
 
 export async function main1155(
   contractaddress: string | undefined,
-  doGame = false
-) {
+  ) {
   let deployedContract = undefined;
 
   if (contractaddress) {
@@ -106,54 +106,35 @@ export async function main1155(
     }
   ]);
 
+  let fromaddress=signers[0].address;
+  let toaddress=signers[1].address;
+
   const gold = await myErc1155.GOLD();
   await showErc1155Balances('GOLD', myErc1155, gold, [
-    owner.address,
-    signers[2].address
+    fromaddress,
+    toaddress
   ]);
 
-  const doBasic = false;
-  if (doBasic) {
+  
+  let doGame = false
+  // ask user, if user enter y, then doGame is true
+  let doGameString = await ask('Do game? (y/n) ');
+  if (doGameString === 'y') {
+    doGame = true;
+  }
+  if (doGame) {
     const trasnferResult = await erc1155Transfer(
       myErc1155,
-      signers[0].address,
-      signers[2].address,
+      fromaddress,
+      toaddress,
       gold.toString(),
       '1'
     );
     await new Promise((r) => setTimeout(r, 5000));
     await showErc1155Balances('GOLD', myErc1155, gold, [
-      owner.address,
-      signers[2].address
+      fromaddress,
+      toaddress
     ]);
-  }
-
-  if (doGame) {
-    for (let i = 0; i < 10; i++) {
-      console.log(`Loop ${i}`);
-      if (0 == i % 2) {
-        await erc1155Transfer(
-          myErc1155,
-          signers[2].address,
-          signers[0].address,
-          gold.toString(),
-          '1'
-        );
-      } else {
-        await erc1155Transfer(
-          myErc1155,
-          signers[0].address,
-          signers[2].address,
-          gold.toString(),
-          '1'
-        );
-      }
-    }
-    // sleep 5 seconds
-    await new Promise((r) => setTimeout(r, 5000));
-    await showErc1155Balances('GOLD', myErc1155, gold, [
-      signers[0].address,
-      signers[2].address
-    ]);
-  }
+  }  
+  
 }
