@@ -1,4 +1,6 @@
 import { Provider } from "zksync-ethers";
+import { ethers } from 'hardhat';
+import { showSigners, ask } from './util';
 
 async function getLatestBlock(provider: Provider) {
   try {
@@ -11,12 +13,19 @@ async function getLatestBlock(provider: Provider) {
   }
 }
 
+async function show() {
+  const signers = await ethers.getSigners();
+  await showSigners(signers);
+  
+}
 async function main() {
+  
   const provider = new Provider("https://testnet.zkevm.cronos.org");
   const latestBlock = await getLatestBlock(provider);
   if (latestBlock) {
     console.log("Block height:", latestBlock.number);
   } 
+  show();
 }
 
 main().catch((error) => {

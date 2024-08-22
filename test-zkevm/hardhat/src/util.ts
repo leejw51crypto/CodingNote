@@ -6,17 +6,16 @@ export async function showSigners(signers: any[]) {
 
   for (let i = 0; i < signers.length; i++) {
     const signer = signers[i];
-    const balance = await signer.getBalance();
-    const balanceInEth = ethers.utils.formatEther(balance);
-
+    
     data.push({
       Index: i,
       Address: signer.address,
-      'ETH Balance': balanceInEth + ' ETH'
+    
     });
 
-    console.table(data, ['Index', 'Address', 'ETH Balance']);
+    
   }
+  console.table(data, ['Index', 'Address']);
 }
 export function ask(question: string): Promise<string> {
   const readlineInterface = readline.createInterface({
