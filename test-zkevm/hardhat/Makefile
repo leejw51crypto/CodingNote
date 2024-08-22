@@ -1,5 +1,10 @@
-all:
-	npx hardhat run ./scripts/index.ts --network zkSync
+all: 
+	npx hardhat compile
+	npx hardhat run ./src/index.ts
 
-compile:
-	 npx hardhat compile --force
+display:
+	npx hardhat run ./src/display.ts
+all2:
+	yarn
+	yarn build
+	yarn start
