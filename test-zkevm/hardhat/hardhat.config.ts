@@ -34,8 +34,19 @@ const config: HardhatUserConfig = {
         count: 5,
         passphrase: ''
       }
-    }
-  }
+    },
+
+    zkSync: {
+      url: "https://zksync2-testnet.zksync.dev",
+      accounts: {
+        mnemonic: process.env.MYMNEMONICS,
+        path: "m/44'/60'/0'/0",
+        initialIndex: 0,
+        count: 5,
+        passphrase: ''
+      }
+    },
+  },
 };
 
 export default config;

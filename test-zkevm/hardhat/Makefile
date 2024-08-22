@@ -1,2 +1,5 @@
 all:
-	npx hardhat run ./scripts/index.ts --network my
+	npx hardhat run ./scripts/index.ts --network zkSync
+
+compile:
+	 npx hardhat compile --force
