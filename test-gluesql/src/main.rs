@@ -3,8 +3,9 @@ use {
     chrono::Utc,
     fake::faker::address::en::SecondaryAddress,
     fake::{faker::name::en::Name, faker::phone_number::en::PhoneNumber, Fake},
-    gluesql::{prelude::Glue, sled_storage::SledStorage},
+    gluesql::{prelude::Glue, },
 };
+use gluesql::gluesql_sled_storage::SledStorage;
 
 struct GreetRow {
     id: i64,
