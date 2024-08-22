@@ -13,5 +13,9 @@
   "description": "",
   "devDependencies": {
     "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "ethers": "^6.13.2",
+    "zksync-ethers": "^6.11.2"
   }
 }
