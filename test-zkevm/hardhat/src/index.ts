@@ -20,14 +20,17 @@ async function sendAmount() {
   let from = signers[0];
   let to = signers[1];
 
-  const amount = ethers.parseEther("0.001"); // 0.001 ETH
+  const amount = ethers.parseEther("0.1"); // 0.001 ETH
+  const data = ethers.encodeBytes32String("Hello, Cronos zkEVM!"); // 32 bytes of string data
 
   console.log(`Sending ${ethers.formatEther(amount)} ETH from ${from.address} to ${to.address}`);
+  console.log(`Including data: ${ethers.decodeBytes32String(data)}`);
 
   try {
     const tx = await from.sendTransaction({
       to: to.address,
-      value: amount
+      value: amount,
+      data: data
     });
 
     console.log(`Transaction sent: ${tx.hash}`);
