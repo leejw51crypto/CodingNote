@@ -86,24 +86,21 @@ async fn send_amount(from_wallet: &LocalWallet, to_address: Address, amount: U25
     let client = SignerMiddleware::new(provider.clone(), signer);
     let client = Arc::new(client);
 
-    // Remove ZKSWallet usage as it's specific to zkSync
-    // let zk_wallet = ZKSWallet::new(client.signer().clone(), None, Some(provider.clone()), None)?;
+    let zk_wallet = ZKSWallet::new(client.signer().clone(), None, Some(provider.clone()), None)?;
 
     println!("Sender's balance before paying: {:?}", 
         provider.get_balance(from_wallet.address(), None).await?);
     println!("Receiver's balance before getting paid: {:?}", 
         provider.get_balance(to_address, None).await?);
 
-    // Create a standard Ethereum transaction
-    let tx = client
-        .send_transaction(
-            ethers::types::TransactionRequest::new()
-                .to(to_address)
-                .value(amount),
-            None,
-        )
-        .await?
-        .await?;
+    // Create a ZKSWallet transfer request
+    let payment_request = TransferRequest::new(amount)
+        .to(to_address)
+        .from(from_wallet.address());
+
+    // Send the transaction using ZKSWallet
+    let tx_hash = zk_wallet.transfer(&payment_request, None).await?;
+    let tx = provider.get_transaction_receipt(tx_hash).await?.unwrap();
 
     println!("Transaction receipt: {:?}", tx);
 
