@@ -13,11 +13,37 @@ async function getLatestBlock(provider: Provider) {
   }
 }
 
-async function show() {
+async function sendAmount() {
   const signers = await ethers.getSigners();
   await showSigners(signers);
-  
+
+  let from = signers[0];
+  let to = signers[1];
+
+  const amount = ethers.parseEther("0.001"); // 0.001 ETH
+
+  console.log(`Sending ${ethers.formatEther(amount)} ETH from ${from.address} to ${to.address}`);
+
+  try {
+    const tx = await from.sendTransaction({
+      to: to.address,
+      value: amount
+    });
+
+    console.log(`Transaction sent: ${tx.hash}`);
+    await tx.wait();
+    console.log(`Transaction confirmed`);
+
+    const fromBalance = await ethers.provider.getBalance(from.address);
+    const toBalance = await ethers.provider.getBalance(to.address);
+
+    console.log(`New balance of sender: ${ethers.formatEther(fromBalance)} ETH`);
+    console.log(`New balance of recipient: ${ethers.formatEther(toBalance)} ETH`);
+  } catch (error) {
+    console.error("Error sending transaction:", error);
+  }
 }
+
 async function main() {
   
   const provider = new Provider("https://testnet.zkevm.cronos.org");
@@ -25,7 +51,7 @@ async function main() {
   if (latestBlock) {
     console.log("Block height:", latestBlock.number);
   } 
-  show();
+  sendAmount();
 }
 
 main().catch((error) => {

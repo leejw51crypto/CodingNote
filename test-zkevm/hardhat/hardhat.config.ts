@@ -36,8 +36,9 @@ const config: HardhatUserConfig = {
       }
     },
 
-    zkSync: {
-      url: "https://zksync2-testnet.zksync.dev",
+    cronosZkEvmTestnet: {
+      url: "https://testnet.zkevm.cronos.org",
+      chainId: 282,
       accounts: {
         mnemonic: process.env.MYMNEMONICS,
         path: "m/44'/60'/0'/0",
@@ -45,6 +46,19 @@ const config: HardhatUserConfig = {
         count: 5,
         passphrase: ''
       }
+    },
+
+    cronosZkEvmMainnet: {
+      url: "https://mainnet.zkevm.cronos.org",
+      chainId: 388,
+      accounts: {
+        mnemonic: process.env.MYMNEMONICS,
+        path: "m/44'/60'/0'/0",
+        initialIndex: 0,
+        count: 5,
+        passphrase: ''
+      },
+      gasPrice: 2500000000000 // 2500 gwei
     },
   },
 };
