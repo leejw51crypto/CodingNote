@@ -1,13 +1,17 @@
 use anyhow::Result;
-use bip39::{Language, Mnemonic};
 use chrono;
-use colored::*;
 use ethers::prelude::k256::ecdsa::SigningKey;
 use ethers::signers::{LocalWallet, MnemonicBuilder, Signer};
+use ethers::providers::{Provider, Http};
+use ethers::types::{Address, U256};
 use hex;
 use prettytable::{row, Table};
 use rpassword::prompt_password;
 use std::env;
+use ethers::middleware::SignerMiddleware;
+use ethers::providers::Middleware;
+use std::sync::Arc;
+use zksync_web3_rs::{zks_wallet::TransferRequest, ZKSWallet};
 
 fn get_mnemonics() -> Result<String> {
     let mut mnemonics = prompt_password("Enter your mnemonics: ")?;
@@ -73,16 +77,65 @@ fn print_current_time() {
     table.printstd();
 }
 
-fn main() -> Result<()> {
+async fn send_amount(from_wallet: &LocalWallet, to_address: Address, amount: U256) -> Result<()> {
+    let provider = Provider::<Http>::try_from("https://testnet.zkevm.cronos.org")?;
+    let chain_id = 282u64; // Cronos zkEVM testnet
+
+    // Clone the wallet to avoid moving out of a shared reference
+    let signer = from_wallet.clone().with_chain_id(chain_id);
+    let client = SignerMiddleware::new(provider.clone(), signer);
+    let client = Arc::new(client);
+
+    // Remove ZKSWallet usage as it's specific to zkSync
+    // let zk_wallet = ZKSWallet::new(client.signer().clone(), None, Some(provider.clone()), None)?;
+
+    println!("Sender's balance before paying: {:?}", 
+        provider.get_balance(from_wallet.address(), None).await?);
+    println!("Receiver's balance before getting paid: {:?}", 
+        provider.get_balance(to_address, None).await?);
+
+    // Create a standard Ethereum transaction
+    let tx = client
+        .send_transaction(
+            ethers::types::TransactionRequest::new()
+                .to(to_address)
+                .value(amount),
+            None,
+        )
+        .await?
+        .await?;
+
+    println!("Transaction receipt: {:?}", tx);
+
+    println!("Sender's balance after paying: {:?}", 
+        provider.get_balance(from_wallet.address(), None).await?);
+    println!("Receiver's balance after getting paid: {:?}", 
+        provider.get_balance(to_address, None).await?);
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
     let mnemonics = get_mnemonics()?;
 
+    let mut wallets = Vec::new();
     for i in 0..5 {
         let wallet = create_wallet(&mnemonics, i)?;
         print_wallet_info(&wallet, i)?;
+        wallets.push(wallet);
         println!();
     }
 
     print_current_time();
+
+    // Send amount from wallet 0 to wallet 1
+    let amount = U256::from(100_000_000_000_000_000u64); // 0.1 ETH
+    let from_wallet = &wallets[0];
+    let to_address = wallets[1].address();
+
+    println!("Sending {} wei from wallet 0 to wallet 1", amount);
+    send_amount(from_wallet, to_address, amount).await?;
 
     Ok(())
 }
