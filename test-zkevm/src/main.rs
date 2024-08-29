@@ -1,17 +1,99 @@
 use anyhow::Result;
-use chrono;
-use ethers::prelude::k256::ecdsa::SigningKey;
-use ethers::signers::{LocalWallet, MnemonicBuilder, Signer};
-use ethers::providers::{Provider, Http};
-use ethers::types::{Address, U256};
-use hex;
-use prettytable::{row, Table};
+use ethers::abi::Abi;
+use ethers::abi::Token;
+use ethers::core::k256::ecdsa::SigningKey;
+use ethers::providers::Http;
+use ethers::signers::MnemonicBuilder;
+use ethers::types::H160;
 use rpassword::prompt_password;
 use std::env;
-use ethers::middleware::SignerMiddleware;
-use ethers::providers::Middleware;
-use std::sync::Arc;
-use zksync_web3_rs::{zks_wallet::TransferRequest, ZKSWallet};
+use zksync_web3_rs::providers::{Middleware, Provider};
+use zksync_web3_rs::signers::Signer;
+use zksync_web3_rs::zks_provider::ZKSProvider;
+use zksync_web3_rs::zks_wallet::{CallRequest, DeployRequest};
+use zksync_web3_rs::ZKSWallet;
+
+struct ZkEvmCore {
+    zk_wallet: ZKSWallet<Provider<Http>, SigningKey>,
+}
+
+impl ZkEvmCore {
+    async fn new(mnemonics: &str, index: u32) -> Result<Self> {
+        let wallet = MnemonicBuilder::<ethers::signers::coins_bip39::English>::default()
+            .phrase(mnemonics)
+            .index(index)?
+            .build()?;
+
+        let l2_provider = Provider::try_from("https://testnet.zkevm.cronos.org")?;
+        let chain_id = l2_provider.get_chainid().await?;
+        let l2_wallet = wallet.with_chain_id(chain_id.as_u64());
+
+        let zk_wallet = ZKSWallet::new(l2_wallet, None, Some(l2_provider.clone()), None)?;
+
+        Ok(Self { zk_wallet })
+    }
+
+    async fn deploy_contract(
+        &self,
+        abi: Abi,
+        contract_bin: Vec<u8>,
+        args: Vec<String>,
+    ) -> Result<H160> {
+        let request =
+            DeployRequest::with(abi, contract_bin, args).from(self.zk_wallet.l2_address());
+        self.zk_wallet
+            .deploy(&request)
+            .await
+            .map_err(|e| anyhow::anyhow!("Deploy error: {}", e))
+    }
+
+    async fn call_view_method(&self, contract_address: H160, method: &str) -> Result<Vec<String>> {
+        let era_provider = self.zk_wallet.get_era_provider()?;
+        let call_request = CallRequest::new(contract_address, method.to_owned());
+        ZKSProvider::call(era_provider.as_ref(), &call_request)
+            .await
+            .map_err(|e| anyhow::anyhow!("Call error: {}", e))
+            .and_then(tokens_to_strings)
+    }
+
+    async fn send_transaction(
+        &self,
+        contract_address: H160,
+        method: &str,
+        args: Option<Vec<String>>,
+    ) -> Result<ethers::types::TxHash> {
+        let receipt = self
+            .zk_wallet
+            .get_era_provider()?
+            .clone()
+            .send_eip712(
+                &self.zk_wallet.l2_wallet,
+                contract_address,
+                method,
+                args,
+                None,
+            )
+            .await?
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found"))?;
+
+        Ok(receipt.transaction_hash)
+    }
+}
+
+// Helper function to convert Token to String
+fn tokens_to_strings(tokens: Vec<Token>) -> Result<Vec<String>> {
+    tokens
+        .into_iter()
+        .map(|token| match token {
+            Token::String(s) => Ok(s),
+            _ => Err(anyhow::anyhow!("Unexpected token type")),
+        })
+        .collect()
+}
+
+static CONTRACT_BIN: &str = include_str!("./Greeter.bin");
+static CONTRACT_ABI: &str = include_str!("./Greeter.abi");
 
 fn get_mnemonics() -> Result<String> {
     let mut mnemonics = prompt_password("Enter your mnemonics: ")?;
@@ -22,117 +104,63 @@ fn get_mnemonics() -> Result<String> {
     Ok(mnemonics)
 }
 
-fn create_wallet(mnemonics: &str, index: u32) -> Result<LocalWallet> {
-    MnemonicBuilder::<ethers::signers::coins_bip39::English>::default()
-        .phrase(mnemonics)
-        .index(index)?
-        .build()
-        .map_err(|e| anyhow::anyhow!("Failed to create wallet: {}", e))
-}
-
-fn print_wallet_info(wallet: &LocalWallet, index: u32) -> Result<()> {
-    let wallet_address: Vec<u8> = wallet.address().0.to_vec();
-    let wallet_string = hex::encode(&wallet_address);
-
-    let secret_key_bytes: [u8; 32] = wallet.signer().to_bytes().into();
-    let secret_key =
-        SigningKey::from_bytes(&secret_key_bytes.into()).expect("Failed to create key");
-
-    let public_key = secret_key.verifying_key();
-    let public_key_bytes = public_key.to_encoded_point(false).to_bytes();
-
-    let truncated_pubkey = format!(
-        "{}...{}",
-        hex::encode(&public_key_bytes[..8]),
-        hex::encode(&public_key_bytes[public_key_bytes.len() - 8..])
-    );
-
-    let mut table = Table::new();
-    table.set_format(*prettytable::format::consts::FORMAT_BOX_CHARS);
-    table.add_row(row!["Index", index]);
-    table.add_row(row!["Wallet Address", wallet_string]);
-    table.add_row(row!["Public Key", truncated_pubkey]);
-    table.add_row(row![
-        "Public Key Length",
-        format!("{} bytes", public_key_bytes.len())
-    ]);
-    table.add_row(row![
-        "Private Key Length",
-        format!("{} bytes", secret_key_bytes.len())
-    ]);
-
-    table.printstd();
-    Ok(())
-}
-
-fn print_current_time() {
-    let now = chrono::offset::Local::now();
-    let utc_now = chrono::offset::Utc::now();
-
-    let mut table = Table::new();
-    table.set_format(*prettytable::format::consts::FORMAT_BOX_CHARS);
-    table.add_row(row!["Local Time", now.to_string()]);
-    table.add_row(row!["UTC Time", utc_now.to_string()]);
-
-    table.printstd();
-}
-
-async fn send_amount(from_wallet: &LocalWallet, to_address: Address, amount: U256) -> Result<()> {
-    let provider = Provider::<Http>::try_from("https://testnet.zkevm.cronos.org")?;
-    let chain_id = 282u64; // Cronos zkEVM testnet
-
-    // Clone the wallet to avoid moving out of a shared reference
-    let signer = from_wallet.clone().with_chain_id(chain_id);
-    let client = SignerMiddleware::new(provider.clone(), signer);
-    let client = Arc::new(client);
-
-    let zk_wallet = ZKSWallet::new(client.signer().clone(), None, Some(provider.clone()), None)?;
-
-    println!("Sender's balance before paying: {:?}", 
-        provider.get_balance(from_wallet.address(), None).await?);
-    println!("Receiver's balance before getting paid: {:?}", 
-        provider.get_balance(to_address, None).await?);
-
-    // Create a ZKSWallet transfer request
-    let payment_request = TransferRequest::new(amount)
-        .to(to_address)
-        .from(from_wallet.address());
-
-    // Send the transaction using ZKSWallet
-    let tx_hash = zk_wallet.transfer(&payment_request, None).await?;
-    let tx = provider.get_transaction_receipt(tx_hash).await?.unwrap();
-
-    println!("Transaction receipt: {:?}", tx);
-
-    println!("Sender's balance after paying: {:?}", 
-        provider.get_balance(from_wallet.address(), None).await?);
-    println!("Receiver's balance after getting paid: {:?}", 
-        provider.get_balance(to_address, None).await?);
-
-    Ok(())
-}
-
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    let mnemonics = get_mnemonics()?;
+    println!("🔐 Welcome to the ZkSync Wallet Demo! 🚀");
 
-    let mut wallets = Vec::new();
-    for i in 0..5 {
-        let wallet = create_wallet(&mnemonics, i)?;
-        print_wallet_info(&wallet, i)?;
-        wallets.push(wallet);
-        println!();
+    let mnemonics = get_mnemonics()?;
+    let index: u32 = 0;
+
+    println!("🔧 Setting up ZkEvmCore...");
+    let core = ZkEvmCore::new(&mnemonics, index).await?;
+
+    // Deploy contract:
+    let contract_address = {
+        println!("📝 Deploying smart contract...");
+        let abi = Abi::load(CONTRACT_ABI.as_bytes())?;
+        let contract_bin = hex::decode(CONTRACT_BIN)?.to_vec();
+        let address = core
+            .deploy_contract(abi, contract_bin, vec!["Hey".to_owned()])
+            .await?;
+
+        println!("✅ Contract deployed successfully!");
+        println!("📍 Contract address: {:#?}", address);
+
+        address
+    };
+
+    // Call the greet view method:
+    {
+        println!("👋 Calling greet() method...");
+        let greet = core
+            .call_view_method(contract_address, "greet()(string)")
+            .await?;
+        println!("🗨️ Greeting: {}", greet[0]);
     }
 
-    print_current_time();
+    // Perform a signed transaction calling the setGreeting method
+    {
+        println!("✍️ Setting new greeting...");
+        let tx_hash = core
+            .send_transaction(
+                contract_address,
+                "setGreeting(string)",
+                Some(vec!["Hello".into()]),
+            )
+            .await?;
+        println!("🔗 setGreeting transaction hash: {:#?}", tx_hash);
+    };
 
-    // Send amount from wallet 0 to wallet 1
-    let amount = U256::from(100_000_000_000_000_000u64); // 0.1 ETH
-    let from_wallet = &wallets[0];
-    let to_address = wallets[1].address();
+    // Call the greet view method again:
+    {
+        println!("👋 Calling greet() method again...");
+        let greet = core
+            .call_view_method(contract_address, "greet()(string)")
+            .await?;
+        println!("🗨️ Updated greeting: {}", greet[0]);
+    }
 
-    println!("Sending {} wei from wallet 0 to wallet 1", amount);
-    send_amount(from_wallet, to_address, amount).await?;
+    println!("🎉 Demo completed successfully! 🎊");
 
     Ok(())
 }

@@ -20,6 +20,7 @@
         "@openzeppelin/contracts": "^4.9.5",
         "@openzeppelin/contracts-upgradeable": "^4.9.5",
         "hardhat": "^2.22.4",
+        "ts-node": "^10.9.2",
         "typescript": "^5.5.4"
     }
 }
