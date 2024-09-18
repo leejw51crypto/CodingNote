@@ -42,7 +42,7 @@ async def create_contract(network_config):
     signed_txn = w3.eth.account.sign_transaction(transaction, network_config['private_key'])
     
     try:
-        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         print(f"Transaction hash: {tx_hash.hex()}")
     except Exception as e:
         print(f"Error sending transaction: {str(e)}")
@@ -83,7 +83,7 @@ async def create_contract(network_config):
    
     
     signed_tx = w3.eth.account.sign_transaction(tx, network_config['private_key'])
-    tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+    tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
     w3.eth.wait_for_transaction_receipt(tx_hash)
     print("Setting new greeting...")
 
