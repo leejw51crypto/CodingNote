@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use reqwest;
-use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 fn main() -> Result<()> {
@@ -13,20 +12,22 @@ fn main() -> Result<()> {
     ];
 
     // Create a new Tokio runtime
-    let runtime = Arc::new(Runtime::new().context("Failed to create Tokio runtime")?);
+    let runtime = Runtime::new().context("Failed to create Tokio runtime")?;
 
     // Process data in parallel using Rayon and collect results
-    let results: Vec<_> = urls
+    let results: Vec<Result<(String, usize)>> = urls
         .par_iter()
-        .filter_map(|&url| {
-            let runtime = Arc::clone(&runtime);
-            runtime.block_on(async { process_data(url).await.ok() })
+        .map(|&url| {
+            runtime.block_on(async { process_data(url).await })
         })
         .collect();
 
     // Print results
-    for (url, size) in results {
-        println!("Processed data size for {}: {} bytes", url, size);
+    for result in results {
+        match result {
+            Ok((url, size)) => println!("Processed data size for {}: {} bytes", url, size),
+            Err(e) => eprintln!("Error processing data: {}", e),
+        }
     }
 
     Ok(())
