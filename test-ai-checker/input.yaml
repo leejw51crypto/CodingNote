@@ -1,0 +1,5 @@
+# WARNING: this is bad input example, don't use it
+sql_statements:
+  - "SELECT * FROM users WHERE id = 1"
+  # bad example, only use it for testing
+  #- "SELECT * FROM products WHERE category = 'Gifts'--' AND released = 1"
