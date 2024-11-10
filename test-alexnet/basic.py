@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
+import numpy as np
 
 """
 Dataset Specification:
@@ -143,3 +145,58 @@ if __name__ == "__main__":
     for point in test_points:
         pred, prob = predict(model, point.reshape(1, -1))
         print(f"[{point[0]:5.1f}, {point[1]:5.1f}] | Class {int(pred[0][0])}         | {prob[0][0]:.3f}")
+
+    # Add visualization code
+    def plot_decision_boundary():
+        # Create a mesh grid
+        x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+        y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+        xx, yy = np.meshgrid(np.linspace(x_min, x_max, 100),
+                            np.linspace(y_min, y_max, 100))
+        
+        # Get predictions for all grid points
+        grid_points = torch.FloatTensor(np.c_[xx.ravel(), yy.ravel()])
+        Z, probs = predict(model, grid_points)
+        Z = Z.reshape(xx.shape)
+        
+        # Create the plot
+        plt.figure(figsize=(10, 8))
+        
+        # Plot decision boundary
+        plt.contourf(xx, yy, Z, alpha=0.4, cmap='RdYlBu')
+        
+        # Plot training points
+        class0_mask = y.flatten() == 0
+        class1_mask = y.flatten() == 1
+        
+        plt.scatter(X[class0_mask, 0], X[class0_mask, 1], 
+                   c='blue', label='Class 0', edgecolors='k')
+        plt.scatter(X[class1_mask, 0], X[class1_mask, 1], 
+                   c='red', label='Class 1', edgecolors='k')
+        
+        # Plot test points with their predictions
+        test_predictions = []
+        for point in test_points:
+            pred, prob = predict(model, point.reshape(1, -1))
+            pred_class = int(pred[0][0])
+            prob_val = float(prob[0][0])
+            test_predictions.append((pred_class, prob_val))
+            
+            # Add text annotation showing prediction and probability
+            plt.scatter(point[0], point[1], c='green', marker='*', 
+                       s=200, edgecolors='k')
+            plt.annotate(f'Class {pred_class}\n({prob_val:.2f})', 
+                        (point[0], point[1]), 
+                        xytext=(10, 10), 
+                        textcoords='offset points',
+                        bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+        
+        plt.xlabel('X1')
+        plt.ylabel('X2')
+        plt.title('Binary Classification Results\nGreen stars: Test points with predicted class')
+        plt.legend(['Class 0', 'Class 1'])
+        plt.grid(True)
+        plt.show()
+
+    # Call the plotting function after training
+    plot_decision_boundary()
