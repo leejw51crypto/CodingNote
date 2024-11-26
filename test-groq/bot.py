@@ -11,7 +11,7 @@ from deepgram import DeepgramClient, SpeakOptions
 
 load_dotenv()
 
-USE_VOICE = False  # Global voice flag
+USE_VOICE = True  # Global voice flag
 
 class TranscriptCollector:
     def __init__(self):
@@ -167,34 +167,58 @@ class ConversationManager:
     def __init__(self):
         self.transcription_response = ""
         self.llm = LanguageModelProcessor()
+        self.background_task = None
+        self.last_processed_time = 0
+        self.processing_interval = 5  # Process every 5 seconds
 
     async def get_text_input(self):
-        text = input("You: ")
-        return text
+        # Create an executor to run input() in a separate thread
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, input, "You: ")
+
+    async def background_process(self):
+        while True:
+            print("Background task running...")
+            # Add your background processing logic here
+            await asyncio.sleep(5)  # Sleep for 5 seconds between runs
 
     async def main(self):
-        global USE_VOICE  # Reference the global variable
-        
+        global USE_VOICE
+
+        # Start the background task
+        self.background_task = asyncio.create_task(self.background_process())
+
         def handle_full_sentence(full_sentence):
             self.transcription_response = full_sentence
 
-        while True:
-            if USE_VOICE:
-                await get_transcript(handle_full_sentence)
-                user_input = self.transcription_response
-            else:
-                user_input = await self.get_text_input()
-            
-            if "goodbye" in user_input.lower():
-                print("Goodbye!")
-                break
-            
-            llm_response = self.llm.process(user_input)
-            print(f"Assistant: {llm_response}")
-            
-            if USE_VOICE:
-                await generate_and_play_speech(llm_response)
-            self.transcription_response = ""
+        try:
+            while True:
+                if USE_VOICE:
+                    await get_transcript(handle_full_sentence)
+                    user_input = self.transcription_response
+                else:
+                    # Now input won't block background processing
+                    user_input = await self.get_text_input()
+                
+                if "goodbye" in user_input.lower():
+                    print("Goodbye!")
+                    break
+                
+                llm_response = self.llm.process(user_input)
+                print(f"Assistant: {llm_response}")
+                
+                if USE_VOICE:
+                    await generate_and_play_speech(llm_response)
+                self.transcription_response = ""
+
+        finally:
+            # Clean up background task
+            if self.background_task:
+                self.background_task.cancel()
+                try:
+                    await self.background_task
+                except asyncio.CancelledError:
+                    pass
 
 if __name__ == "__main__":
     import argparse
