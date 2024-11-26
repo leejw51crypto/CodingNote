@@ -6,6 +6,9 @@ import subprocess
 import requests
 import time
 import os
+import websockets
+import json
+import pyaudio
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
@@ -132,62 +135,87 @@ class TranscriptCollector:
 transcript_collector = TranscriptCollector()
 
 async def get_transcript(callback):
-    transcription_complete = asyncio.Event()  # Event to signal transcription completion
+    transcription_complete = asyncio.Event()
+    transcript_collector = TranscriptCollector()
 
     try:
-        # example of setting up a client config. logging values: WARNING, VERBOSE, DEBUG, SPAM
-        config = DeepgramClientOptions(options={"keepalive": "true"})
-        deepgram: DeepgramClient = DeepgramClient("", config)
+        # Initialize Deepgram API URL and authentication
+        DEEPGRAM_URL = f"wss://api.deepgram.com/v1/listen?model=nova-2&punctuate=true&language=en-US&encoding=linear16&channels=1&sample_rate=16000&endpointing=300&smart_format=true"
+        
+        async with websockets.connect(
+            DEEPGRAM_URL,
+            extra_headers={"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}"}
+        ) as ws:
+            print("Listening...")
 
-        dg_connection = deepgram.listen.asynclive.v("1")
-        print ("Listening...")
-
-        async def on_message(self, result, **kwargs):
-            sentence = result.channel.alternatives[0].transcript
+            # Open microphone stream
+            audio_queue = asyncio.Queue()
             
-            if not result.speech_final:
-                transcript_collector.add_part(sentence)
-            else:
-                # This is the final part of the current sentence
-                transcript_collector.add_part(sentence)
-                full_sentence = transcript_collector.get_full_transcript()
-                # Check if the full_sentence is not empty before printing
-                if len(full_sentence.strip()) > 0:
-                    full_sentence = full_sentence.strip()
-                    print(f"Human: {full_sentence}")
-                    callback(full_sentence)  # Call the callback with the full_sentence
-                    transcript_collector.reset()
-                    transcription_complete.set()  # Signal to stop transcription and exit
+            async def send_audio():
+                p = pyaudio.PyAudio()
+                stream = p.open(
+                    format=pyaudio.paInt16,
+                    channels=1,
+                    rate=16000,
+                    input=True,
+                    frames_per_buffer=8000
+                )
+                
+                try:
+                    while True:
+                        data = stream.read(8000)
+                        await ws.send(data)
+                        await asyncio.sleep(0.1)
+                except Exception as e:
+                    print(f"Error in send_audio: {e}")
+                finally:
+                    stream.stop_stream()
+                    stream.close()
+                    p.terminate()
 
-        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+            async def receive_transcription():
+                try:
+                    while True:
+                        msg = await ws.recv()
+                        result = json.loads(msg)
+                        
+                        if "channel" in result:
+                            sentence = result["channel"]["alternatives"][0]["transcript"]
+                            
+                            if not result.get("is_final"):
+                                transcript_collector.add_part(sentence)
+                            else:
+                                transcript_collector.add_part(sentence)
+                                full_sentence = transcript_collector.get_full_transcript()
+                                if len(full_sentence.strip()) > 0:
+                                    full_sentence = full_sentence.strip()
+                                    print(f"Human: {full_sentence}")
+                                    callback(full_sentence)
+                                    transcript_collector.reset()
+                                    transcription_complete.set()
+                                    return
+                except Exception as e:
+                    print(f"Error in receive_transcription: {e}")
 
-        options = LiveOptions(
-            model="nova-2",
-            punctuate=True,
-            language="en-US",
-            encoding="linear16",
-            channels=1,
-            sample_rate=16000,
-            endpointing=300,
-            smart_format=True,
-        )
-
-        await dg_connection.start(options)
-
-        # Open a microphone stream on the default input device
-        microphone = Microphone(dg_connection.send)
-        microphone.start()
-
-        await transcription_complete.wait()  # Wait for the transcription to complete instead of looping indefinitely
-
-        # Wait for the microphone to close
-        microphone.finish()
-
-        # Indicate that we've finished
-        await dg_connection.finish()
+            # Create tasks for sending audio and receiving transcriptions
+            send_task = asyncio.create_task(send_audio())
+            receive_task = asyncio.create_task(receive_transcription())
+            
+            # Wait for transcription to complete
+            await transcription_complete.wait()
+            
+            # Cancel the tasks
+            send_task.cancel()
+            receive_task.cancel()
+            
+            try:
+                await send_task
+                await receive_task
+            except asyncio.CancelledError:
+                pass
 
     except Exception as e:
-        print(f"Could not open socket: {e}")
+        print(f"Could not open websocket connection: {e}")
         return
 
 class ConversationManager:
