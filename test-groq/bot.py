@@ -19,6 +19,8 @@ from deepgram import DeepgramClient, SpeakOptions
 
 load_dotenv()
 
+USE_VOICE = False  # Global voice flag
+
 class TranscriptCollector:
     def __init__(self):
         self.reset()
@@ -186,23 +188,42 @@ class ConversationManager:
         self.transcription_response = ""
         self.llm = LanguageModelProcessor()
 
+    async def get_text_input(self):
+        text = input("You: ")
+        return text
+
     async def main(self):
+        global USE_VOICE  # Reference the global variable
+        
         def handle_full_sentence(full_sentence):
             self.transcription_response = full_sentence
 
         while True:
-            await get_transcript(handle_full_sentence)
+            if USE_VOICE:
+                await get_transcript(handle_full_sentence)
+                user_input = self.transcription_response
+            else:
+                user_input = await self.get_text_input()
             
-            if "goodbye" in self.transcription_response.lower():
+            if "goodbye" in user_input.lower():
                 print("Goodbye!")
                 break
             
-            llm_response = self.llm.process(self.transcription_response)
+            llm_response = self.llm.process(user_input)
             print(f"Assistant: {llm_response}")
             
-            await generate_and_play_speech(llm_response)
+            if USE_VOICE:
+                await generate_and_play_speech(llm_response)
             self.transcription_response = ""
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-voice", action="store_true", help="Disable voice mode")
+    args = parser.parse_args()
+    
+    if args.no_voice:
+        USE_VOICE = False
+
     manager = ConversationManager()
     asyncio.run(manager.main())
