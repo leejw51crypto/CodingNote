@@ -4,15 +4,7 @@ import os
 import pyaudio
 import websockets
 from dotenv import load_dotenv
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_groq import ChatGroq
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import (
-    MessagesPlaceholder,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate,
-)
-from langchain.chains import LLMChain
+from openai import OpenAI
 import sounddevice as sd
 import soundfile as sf
 from deepgram import DeepgramClient, SpeakOptions
@@ -36,37 +28,25 @@ class TranscriptCollector:
 
 class LanguageModelProcessor:
     def __init__(self):
-        self.llm = ChatGroq(
-            temperature=0, 
-            model_name="mixtral-8x7b-32768", 
-            groq_api_key=os.getenv("GROQ_API_KEY")
-        )
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history", 
-            return_messages=True
-        )
-
-        # Load the system prompt from a file
-        with open('system_prompt.txt', 'r') as file:
-            system_prompt = file.read().strip()
-        
-        self.prompt = ChatPromptTemplate.from_messages([
-            SystemMessagePromptTemplate.from_template(system_prompt),
-            MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessagePromptTemplate.from_template("{text}")
-        ])
-
-        self.conversation = LLMChain(
-            llm=self.llm,
-            prompt=self.prompt,
-            memory=self.memory
-        )
+        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.messages = [
+            # Load the system prompt from file
+            {"role": "system", "content": open('system_prompt.txt', 'r').read().strip()}
+        ]
 
     def process(self, text):
-        self.memory.chat_memory.add_user_message(text)
-        response = self.conversation.invoke({"text": text})
-        self.memory.chat_memory.add_ai_message(response['text'])
-        return response['text']
+        self.messages.append({"role": "user", "content": text})
+        
+        response = self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=self.messages,
+            temperature=0
+        )
+        
+        assistant_message = response.choices[0].message.content
+        self.messages.append({"role": "assistant", "content": assistant_message})
+        
+        return assistant_message
 
 async def generate_and_play_speech(text, output_file="output.wav"):
     api_key = os.getenv("DEEPGRAM_API_KEY")
