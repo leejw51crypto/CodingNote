@@ -18,7 +18,9 @@ class ChatBot:
     def __init__(self):
         self.project_id = os.getenv("MY_GOOGLE_PROJECTID")
         self.client = None
-        self.history: List[Message] = []
+        self.history: List[Message] = []  # Full history
+        self.context: List[Message] = []  # Active context window
+        self.max_context = 10  # Maximum number of message pairs to keep in context
         self.setup_readline()
 
     def setup_readline(self) -> None:
@@ -83,17 +85,30 @@ class ChatBot:
         )
 
     def create_contents(self) -> List[types.Content]:
+        # Use context instead of history for generating responses
         contents = []
-        for message in self.history:
+        for message in self.context:
             contents.append(
                 types.Content(
                     role=message.role, parts=[types.Part(text=message.content)]
                 )
             )
+        # debug print
+        # print(f"Contents: {contents}")
         return contents
 
+    def update_context(self, message: Message) -> None:
+        """Update the context window while maintaining size limit."""
+        self.context.append(message)
+        # Keep only the most recent message pairs within max_context limit
+        if len(self.context) > self.max_context * 2:
+            # Remove oldest message pair
+            self.context = self.context[2:]
+
     def generate_response(self, user_input: str) -> None:
-        self.history.append(Message(role="user", content=user_input))
+        user_message = Message(role="user", content=user_input)
+        self.history.append(user_message)
+        self.update_context(user_message)
 
         try:
             print("Gemini: ", end="")
@@ -109,8 +124,9 @@ class ChatBot:
                     print(chunk_text, end="")
             print("\n")
 
-            # Add the assistant's response to history
-            self.history.append(Message(role="assistant", content=response_text))
+            assistant_message = Message(role="assistant", content=response_text)
+            self.history.append(assistant_message)
+            self.update_context(assistant_message)
 
         except Exception as e:
             if "429" in str(e):
@@ -125,7 +141,7 @@ class ChatBot:
             print("\n")
 
     def chat_loop(self) -> None:
-        print("\nChat started! (Type 'quit' to exit)")
+        print("\nChat started! (Type 'quit' to exit, 'context' to see current context)")
 
         while True:
             try:
@@ -133,6 +149,12 @@ class ChatBot:
                 if user_input.lower() == "quit":
                     print("Goodbye!")
                     break
+
+                if user_input.lower() == "context":
+                    print("\nCurrent context window:")
+                    for msg in self.context:
+                        print(f"{msg.role}: {msg.content}")
+                    continue
 
                 if not user_input:
                     continue
