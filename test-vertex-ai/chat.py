@@ -5,7 +5,18 @@ import os
 from google.auth.exceptions import DefaultCredentialsError
 from dataclasses import dataclass
 from typing import List, Optional
-import readline  # Add this at the top with other imports
+import readline
+from datetime import datetime
+import pytz
+from vertexai.generative_models import (
+    Content,
+    FunctionDeclaration,
+    GenerationConfig,
+    GenerativeModel,
+    Part,
+    Tool,
+)
+import vertexai
 
 
 @dataclass
@@ -17,11 +28,12 @@ class Message:
 class ChatBot:
     def __init__(self):
         self.project_id = os.getenv("MY_GOOGLE_PROJECTID")
-        self.client = None
-        self.history: List[Message] = []  # Full history
-        self.context: List[Message] = []  # Active context window
-        self.max_context = 10  # Maximum number of message pairs to keep in context
+        self.model = None
+        self.history: List[Message] = []
+        self.context: List[Message] = []
+        self.max_context = 10
         self.setup_readline()
+        self.setup_functions()
 
     def setup_readline(self) -> None:
         # Enable history file
@@ -46,9 +58,10 @@ class ChatBot:
         print(f"Successfully loaded project ID: {self.project_id}")
 
         try:
-            self.client = genai.Client(
-                vertexai=True, project=self.project_id, location="us-central1"
-            )
+            # Initialize Vertex AI
+            vertexai.init(project=self.project_id, location="us-central1")
+            # Initialize Gemini model
+            self.model = GenerativeModel("gemini-2.0-flash-exp")
             return True
         except DefaultCredentialsError:
             print("\nError: Google Cloud credentials not found!")
@@ -62,39 +75,36 @@ class ChatBot:
             )
             return False
 
-    def get_generate_config(self) -> types.GenerateContentConfig:
-        return types.GenerateContentConfig(
-            temperature=1,
-            top_p=0.95,
-            max_output_tokens=8192,
-            response_modalities=["TEXT"],
-            safety_settings=[
-                types.SafetySetting(
-                    category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"
-                ),
-                types.SafetySetting(
-                    category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"
-                ),
-                types.SafetySetting(
-                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"
-                ),
-                types.SafetySetting(
-                    category="HARM_CATEGORY_HARASSMENT", threshold="OFF"
-                ),
-            ],
+    def setup_functions(self) -> None:
+        """Setup function declarations for the model."""
+        self.get_time_func = FunctionDeclaration(
+            name="get_current_time",
+            description="Get the current time in UTC and local timezone",
+            parameters={
+                "type": "object",
+                "properties": {},
+            },
         )
 
-    def create_contents(self) -> List[types.Content]:
-        # Use context instead of history for generating responses
+        self.tools = Tool(function_declarations=[self.get_time_func])
+
+    def get_current_time(self) -> str:
+        """Get current time in UTC and local timezone."""
+        utc_time = datetime.now(pytz.UTC)
+        local_time = datetime.now()
+        local_tz = datetime.now().astimezone().tzinfo
+
+        return (
+            f"UTC Time: {utc_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            f"Local Time ({local_tz}): {local_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+
+    def create_contents(self) -> List[Content]:
         contents = []
         for message in self.context:
             contents.append(
-                types.Content(
-                    role=message.role, parts=[types.Part(text=message.content)]
-                )
+                Content(role=message.role, parts=[Part.from_text(message.content)])
             )
-        # debug print
-        # print(f"Contents: {contents}")
         return contents
 
     def update_context(self, message: Message) -> None:
@@ -113,15 +123,38 @@ class ChatBot:
         try:
             print("Gemini: ", end="")
             response_text = ""
-            for chunk in self.client.models.generate_content_stream(
-                model="gemini-2.0-flash-exp",
+
+            # Create the request with tools
+            response = self.model.generate_content(
                 contents=self.create_contents(),
-                config=self.get_generate_config(),
-            ):
-                if chunk.candidates:
-                    chunk_text = chunk.candidates[0].content.parts[0].text
-                    response_text += chunk_text
-                    print(chunk_text, end="")
+                generation_config=GenerationConfig(
+                    temperature=1.0,
+                    top_p=0.95,
+                    max_output_tokens=8192,
+                ),
+                tools=[self.tools],
+            )
+
+            # Handle function calls in the response
+            if hasattr(response.candidates[0], "function_calls"):
+                for function_call in response.candidates[0].function_calls:
+                    if function_call.name == "get_current_time":
+                        time_info = self.get_current_time()
+                        print(time_info)
+                        response_text = time_info
+                        # Return early after function call to avoid error message
+                        assistant_message = Message(
+                            role="assistant", content=response_text
+                        )
+                        self.history.append(assistant_message)
+                        self.update_context(assistant_message)
+                        return
+
+            # Handle regular text response
+            if hasattr(response, "text") and response.text:
+                print(response.text)
+                response_text = response.text
+
             print("\n")
 
             assistant_message = Message(role="assistant", content=response_text)
