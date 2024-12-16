@@ -1,4 +1,3 @@
-import * as readline from 'readline';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -13,17 +12,13 @@ import type {
   Tool,
 } from '@google-cloud/vertexai/build/src/types/content';
 import * as dotenv from 'dotenv';
+import { Prompt } from './prompt';
 
 dotenv.config();
 
 interface Message {
   role: string;
   content: string;
-}
-
-// Add custom interface for readline with history
-interface ReadlineInterfaceWithHistory extends readline.Interface {
-  history: string[];
 }
 
 // Add function type definitions
@@ -49,7 +44,8 @@ function getCurrentDate(): string {
 // Add Fibonacci function implementation
 function getFibonacci(n: number): number {
   if (n <= 1) return n;
-  let a = 0, b = 1;
+  let a = 0,
+    b = 1;
   for (let i = 2; i <= n; i++) {
     const temp = a + b;
     a = b;
@@ -114,7 +110,7 @@ class ChatBot {
   private context: Message[];
   private maxContext: number;
   private vertexai: VertexAI | null;
-  private rl: ReadlineInterfaceWithHistory;
+  private prompt: Prompt;
 
   constructor() {
     this.projectId = process.env.MY_GOOGLE_PROJECTID || '';
@@ -124,40 +120,8 @@ class ChatBot {
     this.context = [];
     this.maxContext = 10;
 
-    // Initialize readline interface with type assertion
-    this.rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      historySize: 1000,
-      terminal: false,
-    }) as ReadlineInterfaceWithHistory;
-
-    // Initialize history array if it doesn't exist
-    if (!this.rl.history) {
-      (this.rl as any).history = [];
-    }
-
-    this.setupReadline();
-  }
-
-  private setupReadline(): void {
-    const histfile = path.join(os.homedir(), '.chat_history');
-
-    try {
-      if (fs.existsSync(histfile)) {
-        const history = fs.readFileSync(histfile, 'utf8').split('\n');
-        history.forEach((line) => {
-          if (line) this.rl.history.push(line);
-        });
-      }
-    } catch (error) {
-      console.error('Error reading history file:', error);
-    }
-
-    // Save history on exit
-    process.on('exit', () => {
-      fs.writeFileSync(histfile, this.rl.history.join('\n'));
-    });
+    // Initialize prompt
+    this.prompt = new Prompt();
   }
 
   async initialize(): Promise<boolean> {
@@ -319,15 +283,13 @@ class ChatBot {
 
     while (true) {
       try {
-        const userInput = await new Promise<string>((resolve) => {
-          this.rl.question('You: ', resolve);
-        });
+        const userInput = await this.prompt.readLine();
 
         const trimmedInput = userInput.trim();
 
         if (trimmedInput.toLowerCase() === 'quit') {
           console.log('Goodbye!');
-          this.rl.close();
+          this.prompt.close();
           break;
         }
 
@@ -346,7 +308,7 @@ class ChatBot {
         await this.generateResponse(trimmedInput);
       } catch (error) {
         console.error('\nGoodbye!');
-        this.rl.close();
+        this.prompt.close();
         break;
       }
     }
