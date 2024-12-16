@@ -4,15 +4,22 @@
   "main": "index.js",
   "license": "MIT",
   "devDependencies": {
+    "@types/dotenv": "^8.2.0",
     "@types/node": "^22.10.2",
-    "nodemon": "^3.1.9",
+    "nodemon": "^3.1.0",
+    "prettier": "^3.4.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@google-cloud/vertexai": "^0.5.0",
+    "dotenv": "^16.4.5"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
-    "dev:run": "ts-node src/index.ts"
+    "dev:run": "ts-node src/index.ts",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\""
   }
 }
