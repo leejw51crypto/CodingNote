@@ -209,9 +209,12 @@ class ThresholdSignatureScheme:
             curve: Elliptic curve to use (default: SECP256K1)
         """
         self.curve = curve
-        # SECP256K1 prime field
-        self.prime = 2**256 - 2**32 - 977  # This is the prime field for SECP256K1
-        self.sss = ShamirSecretSharing(self.prime)
+        # SECP256K1 curve order - use this for all operations
+        self.curve_order = (
+            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+        )
+        # Initialize SSS with curve order instead of prime field
+        self.sss = ShamirSecretSharing(self.curve_order)
 
     def generate_key_shares(
         self, threshold: int, num_shares: int
@@ -231,8 +234,8 @@ class ThresholdSignatureScheme:
         if num_shares < threshold:
             raise ThresholdSignatureError("Number of shares must be at least threshold")
 
-        # Generate private key
-        private_key = secrets.randbelow(self.curve.key_size)
+        # Generate private key in range [1, curve_order-1]
+        private_key = 1 + secrets.randbelow(self.curve_order - 1)
 
         # Split private key into shares using SSS
         try:
@@ -254,7 +257,9 @@ class ThresholdSignatureScheme:
         h = hashlib.sha256()
         h.update(str(private_key).encode())
         h.update(message)
-        return int.from_bytes(h.digest(), byteorder="big") % self.prime
+        return 1 + (
+            int.from_bytes(h.digest(), byteorder="big") % (self.curve_order - 1)
+        )
 
     def sign_message(
         self,
@@ -284,19 +289,35 @@ class ThresholdSignatureScheme:
             private_key = self.sss.reconstruct_secret(share_tuples, threshold)
 
             if use_deterministic_k:
-                # Use deterministic k for demonstration
+                # Use our deterministic k implementation
                 k = self._deterministic_k(message, private_key)
-                # Create deterministic signature
-                k_inverse = pow(k, -1, self.prime)
-                r = pow(k, -1, self.prime)  # Simplified for demo
-                h = int.from_bytes(hashlib.sha256(message).digest(), byteorder="big")
-                s = (k_inverse * (h + r * private_key)) % self.prime
-                return r, s
+                # Generate point R = k*G
+                k_obj = ec.derive_private_key(k, self.curve)
+                R = k_obj.public_key().public_numbers()
+                r = R.x % self.curve_order
+
+                # Calculate s = k^(-1)(h + r*d) mod n
+                h = (
+                    int.from_bytes(hashlib.sha256(message).digest(), byteorder="big")
+                    % self.curve_order
+                )
+                k_inv = pow(k, -1, self.curve_order)
+                s = (k_inv * (h + r * private_key)) % self.curve_order
             else:
-                # Use regular ECDSA with random k
+                # Use library's implementation
                 private_key_obj = ec.derive_private_key(private_key, self.curve)
-                signature = private_key_obj.sign(message, ec.ECDSA(hashes.SHA256()))
-                return decode_dss_signature(signature)
+                signature = private_key_obj.sign(
+                    message,
+                    ec.ECDSA(hashes.SHA256()),
+                )
+                r, s = decode_dss_signature(signature)
+
+            # Normalize s to the lower value (to ensure consistency)
+            # In ECDSA, both s and -s are valid, so we always choose the lower value
+            if s > self.curve_order // 2:
+                s = self.curve_order - s
+
+            return r, s
 
         except Exception as e:
             raise ThresholdSignatureError(f"Error during signing: {str(e)}")
