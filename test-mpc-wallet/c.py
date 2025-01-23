@@ -119,7 +119,7 @@ class ThresholdSignatureScheme:
         partial_signatures: List[Tuple[int, bytes]],
         parties: List[Party],
         message_hash: bytes,
-    ) -> SignedTransaction:
+    ) -> List[SignedTransaction]:
         r = partial_signatures[0][0]
 
         s_combined = 0
@@ -132,24 +132,38 @@ class ThresholdSignatureScheme:
 
         # Calculate v with EIP-155 replay protection
         chain_id = 338  # Cronos testnet
-        v = chain_id * 2 + 35 + (27 - 27)  # Base v is 27
+        
+        # Try both possible v values
+        possible_v_values = []
+        for base_v in [27, 28]:
+            v = chain_id * 2 + 35 + (base_v - 27)
+            possible_v_values.append(v)
 
+        # Normalize s according to EIP-2
         if s_combined > self.curve_order // 2:
             s_combined = self.curve_order - s_combined
-            v = chain_id * 2 + 35 + (28 - 27)  # Base v is 28
 
-        # Create signature bytes
+        # Create signature components
         r_bytes = r.to_bytes(32, "big")
         s_bytes = s_combined.to_bytes(32, "big")
-        v_bytes = v.to_bytes(32, "big")
-
-        return SignedTransaction(
-            rawTransaction=r_bytes + s_bytes + v_bytes,
-            hash=Web3.keccak(r_bytes + s_bytes + v_bytes),
-            r=r,
-            s=s_combined,
-            v=v,
-        )
+        
+        # Return all possible signatures
+        signatures = []
+        for v in possible_v_values:
+            v_bytes = v.to_bytes(32, "big")
+            sig = r_bytes + s_bytes + v_bytes
+            
+            # Create SignedTransaction object
+            signed_tx = SignedTransaction(
+                rawTransaction=sig,
+                hash=Web3.keccak(sig),
+                r=r,
+                s=s_combined,
+                v=v,
+            )
+            signatures.append(signed_tx)
+            
+        return signatures
 
     def derive_ethereum_address(self, group_public_key: bytes) -> str:
         public_key_bytes = group_public_key[1:]
@@ -185,7 +199,7 @@ class EthereumTSS:
         partial_signatures: List[Tuple[int, bytes]],
         parties: List[Party],
         message_hash: bytes,
-    ) -> SignedTransaction:
+    ) -> List[SignedTransaction]:
         return self.tss.combine_partial_signatures(
             partial_signatures, parties, message_hash
         )
@@ -275,35 +289,48 @@ def send_eth_with_tss(
 
     # Combine signatures
     try:
-        signed_txn = eth_tss.combine_signatures(
+        possible_signed_txns = eth_tss.combine_signatures(
             partial_signatures, parties, message_hash
         )
 
-        # Create the final transaction
-        final_transaction = rlp.encode(
-            [
-                (
-                    w3.to_bytes(hexstr=hex(transaction["nonce"]))
-                    if transaction["nonce"] != 0
-                    else b"\x00"
-                ),
-                w3.to_bytes(hexstr=hex(transaction["gasPrice"])),
-                w3.to_bytes(hexstr=hex(transaction["gas"])),
-                w3.to_bytes(hexstr=transaction["to"]),
-                w3.to_bytes(hexstr=hex(transaction["value"])),
-                transaction["data"],
-                w3.to_bytes(hexstr=hex(signed_txn.v)) if signed_txn.v != 0 else b"\x00",
-                w3.to_bytes(hexstr=hex(signed_txn.r)) if signed_txn.r != 0 else b"\x00",
-                w3.to_bytes(hexstr=hex(signed_txn.s)) if signed_txn.s != 0 else b"\x00",
-            ]
-        )
+        signed_txn = None
+        final_transaction = None
 
-        # Recover and verify sender address from signature
-        recovered_address = w3.eth.account.recover_transaction(final_transaction)
-        print(f"\nRecovered sender address from signature: {recovered_address}")
-        print(f"Expected TSS address: {tss_address}")
-        if recovered_address.lower() != tss_address.lower():
-            raise ValueError("Recovered address doesn't match TSS address!")
+        # Try each possible signature and find the one that matches our TSS address
+        for possible_txn in possible_signed_txns:
+            # Create the final transaction
+            test_transaction = rlp.encode(
+                [
+                    (
+                        w3.to_bytes(hexstr=hex(transaction["nonce"]))
+                        if transaction["nonce"] != 0
+                        else b"\x00"
+                    ),
+                    w3.to_bytes(hexstr=hex(transaction["gasPrice"])),
+                    w3.to_bytes(hexstr=hex(transaction["gas"])),
+                    w3.to_bytes(hexstr=transaction["to"]),
+                    w3.to_bytes(hexstr=hex(transaction["value"])),
+                    transaction["data"],
+                    w3.to_bytes(hexstr=hex(possible_txn.v)) if possible_txn.v != 0 else b"\x00",
+                    w3.to_bytes(hexstr=hex(possible_txn.r)) if possible_txn.r != 0 else b"\x00",
+                    w3.to_bytes(hexstr=hex(possible_txn.s)) if possible_txn.s != 0 else b"\x00",
+                ]
+            )
+
+            # Recover and verify sender address from signature
+            recovered_address = w3.eth.account.recover_transaction(test_transaction)
+            print(f"\nTrying signature with v={possible_txn.v}")
+            print(f"Recovered sender address: {recovered_address}")
+            print(f"Expected TSS address: {tss_address}")
+            
+            if recovered_address.lower() == tss_address.lower():
+                print("Found matching signature!")
+                signed_txn = possible_txn
+                final_transaction = test_transaction
+                break
+
+        if signed_txn is None:
+            raise ValueError("No valid signature found that matches TSS address!")
 
         # Send transaction
         tx_hash = w3.eth.send_raw_transaction(final_transaction)
