@@ -298,6 +298,13 @@ def send_eth_with_tss(
             ]
         )
 
+        # Recover and verify sender address from signature
+        recovered_address = w3.eth.account.recover_transaction(final_transaction)
+        print(f"\nRecovered sender address from signature: {recovered_address}")
+        print(f"Expected TSS address: {tss_address}")
+        if recovered_address.lower() != tss_address.lower():
+            raise ValueError("Recovered address doesn't match TSS address!")
+
         # Send transaction
         tx_hash = w3.eth.send_raw_transaction(final_transaction)
         print(f"\nTransaction sent! Hash: {tx_hash.hex()}")
