@@ -26,6 +26,17 @@ class Party:
     public_key: bytes  # Public key share
 
 
+@dataclass
+class TSSKeyData:
+    """Represents the TSS key setup data"""
+
+    parties: List[Party]
+    tss_address: str
+    group_public_key: bytes
+    threshold: int
+    num_parties: int
+
+
 class ThresholdSignatureScheme:
     def __init__(self):
         self.curve = ec.SECP256K1()
@@ -240,15 +251,14 @@ class EthereumTSS:
 
     def setup_existing_key(
         self, private_key: int, threshold: int, num_parties: int
-    ) -> Tuple[List[Party], str]:
-        """Set up the TSS protocol with an existing private key"""
+    ) -> TSSKeyData:
+        """Set up the TSS protocol with an existing private key and return the key data"""
         if threshold < 2 or threshold > num_parties:
             raise ValueError("Invalid threshold value")
 
         # Generate coefficients for polynomial
         coefficients = [private_key]
         for _ in range(threshold - 1):
-            # Use secure random number generation for coefficients
             coeff = secrets.randbelow(self.tss.curve_order - 1) + 1
             coefficients.append(coeff)
 
@@ -282,7 +292,10 @@ class EthereumTSS:
             )
         )
         eth_address = self.tss.derive_ethereum_address(group_public_key)
-        return parties, eth_address
+
+        return TSSKeyData(
+            parties, eth_address, group_public_key, threshold, num_parties
+        )
 
     def create_partial_signature(
         self, party: Party, message_hash: bytes, common_seed: bytes = None
@@ -302,25 +315,14 @@ class EthereumTSS:
         )
 
 
-def send_eth_with_tss(
-    to_address: str, amount_eth: float, threshold: int = 2, num_parties: int = 3
-):
-    # Configure web3 with Cronos testnet
-    RPC_ENDPOINT = "https://evm-t3.cronos.org/"
-    CHAIN_ID = 338
-
-    # Connect to network
-    w3 = Web3(Web3.HTTPProvider(RPC_ENDPOINT))
-    if not w3.is_connected():
-        raise Exception("Failed to connect to the network")
-
-    # Get private key from environment
-    private_key = os.getenv("MY_FULL_PRIVATEKEY")
-    if private_key.startswith("0x"):
-        private_key = private_key[2:]
-
+def setup_tss_key(
+    private_key_hex: str, threshold: int = 2, num_parties: int = 3
+) -> TSSKeyData:
+    """Set up TSS key splitting - this is the only place where the full private key is used"""
     # Convert hex private key to int for TSS
-    private_key_int = int(private_key, 16)
+    if private_key_hex.startswith("0x"):
+        private_key_hex = private_key_hex[2:]
+    private_key_int = int(private_key_hex, 16)
 
     # Get public key for display purposes
     private_key_obj = ec.derive_private_key(
@@ -333,47 +335,57 @@ def send_eth_with_tss(
 
     # Display key information
     print(f"\n=== Key Information ===")
-    # Show only first 2 and last 2 characters of private key
-    masked_private_key = (
-        f"0x{private_key[:2]}{'*' * (len(private_key) - 4)}{private_key[-2:]}"
-    )
+    masked_private_key = f"0x{private_key_hex[:2]}{'*' * (len(private_key_hex) - 4)}{private_key_hex[-2:]}"
     print(f"Private Key: {masked_private_key}")
     print(f"Public Key: 0x{public_key_bytes.hex()}")
 
-    # Initialize TSS
+    # Initialize TSS and split the key
     eth_tss = EthereumTSS()
-    parties, tss_address = eth_tss.setup_existing_key(
-        private_key_int, threshold, num_parties
-    )
-
-    print(f"Address: {tss_address}")
+    key_data = eth_tss.setup_existing_key(private_key_int, threshold, num_parties)
 
     print(f"\n=== TSS Setup Information ===")
-    print(f"TSS Address: {tss_address}")
-    print(f"Threshold: {threshold}")
-    print(f"Total Parties: {num_parties}")
+    print(f"TSS Address: {key_data.tss_address}")
+    print(f"Threshold: {key_data.threshold}")
+    print(f"Total Parties: {key_data.num_parties}")
 
     # Display partial secret information
-    for i, party in enumerate(parties):
+    for i, party in enumerate(key_data.parties):
         secret_bytes = party.xi.to_bytes(
             (party.xi.bit_length() + 7) // 8, byteorder="big"
         )
         hex_value = secret_bytes.hex()
-        # Show only first 2 and last 2 characters of the hex value
         masked_hex = f"0x{hex_value[:2]}{'*' * (len(hex_value) - 4)}{hex_value[-2:]}"
         print(f"\nParty {i+1} Secret Share:")
         print(f"- Length: {len(secret_bytes)} bytes")
         print(f"- Value (hex): {masked_hex}")
 
+    return key_data
+
+
+def send_eth_with_tss_participants(
+    key_data: TSSKeyData,
+    to_address: str,
+    amount_eth: float,
+):
+    """Send ETH using TSS participants - no access to full private key here"""
+    # Configure web3 with Cronos testnet
+    RPC_ENDPOINT = "https://evm-t3.cronos.org/"
+    CHAIN_ID = 338
+
+    # Connect to network
+    w3 = Web3(Web3.HTTPProvider(RPC_ENDPOINT))
+    if not w3.is_connected():
+        raise Exception("Failed to connect to the network")
+
     # Show initial balances
-    sender_balance_before = w3.eth.get_balance(tss_address)
+    sender_balance_before = w3.eth.get_balance(key_data.tss_address)
     receiver_balance_before = w3.eth.get_balance(to_address)
     print("\n=== Initial Balances ===")
     print(f"Sender balance: {w3.from_wei(sender_balance_before, 'ether')} TCRO")
     print(f"Receiver balance: {w3.from_wei(receiver_balance_before, 'ether')} TCRO")
 
     # Prepare transaction
-    nonce = w3.eth.get_transaction_count(tss_address)
+    nonce = w3.eth.get_transaction_count(key_data.tss_address)
     amount_wei = w3.to_wei(amount_eth, "ether")
 
     transaction = {
@@ -400,7 +412,7 @@ def send_eth_with_tss(
         w3.to_bytes(hexstr=hex(transaction["gas"])),
         w3.to_bytes(hexstr=transaction["to"]),
         w3.to_bytes(hexstr=hex(transaction["value"])),
-        transaction["data"],  # empty bytes for simple transfer
+        transaction["data"],
         w3.to_bytes(hexstr=hex(transaction["chainId"])),
         b"",  # s
         b"",  # r
@@ -417,15 +429,17 @@ def send_eth_with_tss(
     print("\n=== Common Seed ===")
     print(f"Common seed: 0x{common_seed.hex()}")
 
+    # Initialize TSS for signing
+    eth_tss = EthereumTSS()
+
     # Generate partial signatures
     print("\n=== Generating Partial Signatures ===")
     partial_signatures = []
-    for i in range(threshold):
+    for i in range(key_data.threshold):
         partial_sig = eth_tss.create_partial_signature(
-            parties[i], message_hash, common_seed
+            key_data.parties[i], message_hash, common_seed
         )
         r, s_bytes, k, R_bytes = partial_sig
-        # Convert r to hex with proper padding
         r_hex = hex(r)[2:].zfill(64)
         s_hex = s_bytes.hex().zfill(64)
         print(f"\nParty {i+1} Partial Signature:")
@@ -441,7 +455,7 @@ def send_eth_with_tss(
     try:
         print("\n=== Combining Signatures ===")
         possible_signed_txns = eth_tss.combine_signatures(
-            partial_signatures, parties, message_hash
+            partial_signatures, key_data.parties, message_hash
         )
 
         signed_txn = None
@@ -496,9 +510,9 @@ def send_eth_with_tss(
             # Recover and verify sender address from signature
             recovered_address = w3.eth.account.recover_transaction(test_transaction)
             print(f"Recovered sender address: {recovered_address}")
-            print(f"Expected TSS address: {tss_address}")
+            print(f"Expected TSS address: {key_data.tss_address}")
 
-            if recovered_address.lower() == tss_address.lower():
+            if recovered_address.lower() == key_data.tss_address.lower():
                 print("\n=== Valid Signature Found! ===")
                 signed_txn = possible_txn
                 final_transaction = test_transaction
@@ -523,7 +537,7 @@ def send_eth_with_tss(
         print(f"Gas used: {gas_used} (Cost: {w3.from_wei(gas_cost, 'ether')} TCRO)")
 
         # Show final balances
-        sender_balance = w3.eth.get_balance(tss_address)
+        sender_balance = w3.eth.get_balance(key_data.tss_address)
         receiver_balance = w3.eth.get_balance(to_address)
         print("\n=== Final Balances ===")
         print(f"TSS address balance: {w3.from_wei(sender_balance, 'ether')} TCRO")
@@ -539,5 +553,12 @@ if __name__ == "__main__":
     if not to_address:
         raise ValueError("MY_TO_ADDRESS not set in environment")
 
-    # Send 0.1 TCRO using TSS
-    send_eth_with_tss(to_address, 0.1)
+    private_key = os.getenv("MY_FULL_PRIVATEKEY")
+    if not private_key:
+        raise ValueError("MY_FULL_PRIVATEKEY not set in environment")
+
+    # First phase: Split the private key (this is the only place where full private key is used)
+    key_data = setup_tss_key(private_key)
+
+    # Second phase: Use the split keys to send transaction (no access to full private key)
+    send_eth_with_tss_participants(key_data, to_address, 0.1)
