@@ -56,74 +56,136 @@ class ThresholdSignatureScheme:
                 den = (den * (j - m.id)) % self.curve_order
         return (num * self._mod_inverse(den, self.curve_order)) % self.curve_order
 
-    def split_existing_key(
-        self, private_key: int, threshold: int, num_parties: int
-    ) -> Tuple[List[Party], bytes]:
-        if threshold < 2 or threshold > num_parties:
-            raise ValueError("Invalid threshold value")
+    def _hmac(self, key: bytes, msg: bytes) -> bytes:
+        """HMAC using SHA256"""
+        block_size = 64  # SHA256 block size
+        if len(key) > block_size:
+            key = hashlib.sha256(key).digest()
+        key = key + b"\x00" * (block_size - len(key))
 
-        coefficients = [private_key]
-        for _ in range(threshold - 1):
-            coefficients.append(secrets.randbelow(self.curve_order - 1) + 1)
+        o_key_pad = bytes(x ^ 0x5C for x in key)
+        i_key_pad = bytes(x ^ 0x36 for x in key)
 
-        parties: List[Party] = []
+        return hashlib.sha256(
+            o_key_pad + hashlib.sha256(i_key_pad + msg).digest()
+        ).digest()
 
-        for i in range(num_parties):
-            x = i + 1
-            share = coefficients[0]
-            for j in range(1, threshold):
-                exp = pow(x, j, self.curve_order)
-                term = (coefficients[j] * exp) % self.curve_order
-                share = (share + term) % self.curve_order
+    def _bits2int(self, b: bytes, q: int) -> int:
+        """Convert bits to integer modulo q"""
+        b_int = int.from_bytes(b, byteorder="big")
+        l = len(b) * 8
+        qlen = q.bit_length()
+        if l > qlen:
+            b_int >>= l - qlen
+        return b_int
 
-            private_key_obj = ec.derive_private_key(
-                share, self.curve, default_backend()
-            )
-            public_key = private_key_obj.public_key().public_bytes(
-                encoding=serialization.Encoding.X962,
-                format=serialization.PublicFormat.UncompressedPoint,
-            )
+    def _int2octets(self, x: int, q: int) -> bytes:
+        """Convert integer x to octet string of length ceil(qlen/8)"""
+        qlen = q.bit_length()
+        rlen = (qlen + 7) // 8
+        return x.to_bytes(rlen, byteorder="big")
 
-            parties.append(Party(i + 1, share, public_key))
+    def _bits2octets(self, b: bytes, q: int) -> bytes:
+        """Convert bit string to octet string of length ceil(qlen/8)"""
+        z1 = self._bits2int(b, q)
+        z2 = z1 % q
+        return self._int2octets(z2, q)
 
-        group_public_key = (
-            ec.derive_private_key(private_key, self.curve, default_backend())
-            .public_key()
-            .public_bytes(
-                encoding=serialization.Encoding.X962,
-                format=serialization.PublicFormat.UncompressedPoint,
-            )
-        )
+    def _generate_k_rfc6979(self, message_hash: bytes, private_key: int) -> int:
+        """Generate k value according to RFC 6979"""
+        # a.  Process m through the hash function H, yielding: h1 = H(m)
+        #     (h1 is already passed as message_hash)
 
-        return parties, group_public_key
+        # b.  Set: V = 0x01 0x01 0x01 ... 0x01 (32 bytes)
+        V = b"\x01" * 32
 
-    def create_partial_signature(
-        self, party: Party, message_hash: bytes, shared_randomness: Dict[str, int]
-    ) -> Tuple[int, bytes]:
-        k = shared_randomness.get("k")
-        if not k:
-            raise ValueError("k value not provided in shared randomness")
+        # c.  Set: K = 0x00 0x00 0x00 ... 0x00 (32 bytes)
+        K = b"\x00" * 32
 
+        # d.  Set: K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1))
+        x = self._int2octets(private_key, self.curve_order)
+        h1 = self._bits2octets(message_hash, self.curve_order)
+        K = self._hmac(K, V + b"\x00" + x + h1)
+
+        # e.  Set: V = HMAC_K(V)
+        V = self._hmac(K, V)
+
+        # f.  Set: K = HMAC_K(V || 0x01 || int2octets(x) || bits2octets(h1))
+        K = self._hmac(K, V + b"\x01" + x + h1)
+
+        # g.  Set: V = HMAC_K(V)
+        V = self._hmac(K, V)
+
+        # h.  Apply the following algorithm until a proper value is found for k:
+        while True:
+            T = b""
+            while len(T) < 32:
+                V = self._hmac(K, V)
+                T = T + V
+
+            k = self._bits2int(T, self.curve_order)
+            if k >= 1 and k < self.curve_order:
+                return k
+
+            K = self._hmac(K, V + b"\x00")
+            V = self._hmac(K, V)
+
+    def _generate_base_k(self, message_hash: bytes, common_seed: bytes) -> int:
+        """Generate base k value that will be same for all parties using RFC 6979"""
+        # Use common_seed as private key input to ensure all parties generate same k
+        seed_int = int.from_bytes(common_seed, byteorder="big") % self.curve_order
+        return self._generate_k_rfc6979(message_hash, seed_int)
+
+    def _compute_r_point(self, k: int) -> Tuple[int, bytes]:
+        """Compute R = k*G and return (r, R_bytes)"""
         k_key = ec.derive_private_key(k, self.curve, default_backend())
         R = k_key.public_key()
+        R_bytes = R.public_bytes(
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.UncompressedPoint,
+        )
         r = R.public_numbers().x % self.curve_order
+        return r, R_bytes
 
+    def create_partial_signature(
+        self, party: Party, message_hash: bytes, common_seed: bytes = None
+    ) -> Tuple[int, bytes, int, bytes]:
+        """Create partial signature with per-party deterministic k"""
+        if common_seed is None:
+            # Generate a common seed if not provided
+            common_seed = hashlib.sha256(message_hash).digest()
+
+        # Generate base k value - same for all parties
+        k = self._generate_base_k(message_hash, common_seed)
+
+        # Compute R = k*G - will be same for all parties
+        r, R_bytes = self._compute_r_point(k)
+
+        # Compute partial signature
         z = int.from_bytes(message_hash, "big")
         k_inv = self._mod_inverse(k, self.curve_order)
+
+        # Each party computes their share of s = k^(-1)(z + r*x)
         s = (k_inv * (z + (r * party.xi))) % self.curve_order
 
-        return r, s.to_bytes(32, "big")
+        return r, s.to_bytes(32, "big"), k, R_bytes
 
     def combine_partial_signatures(
         self,
-        partial_signatures: List[Tuple[int, bytes]],
+        partial_signatures: List[Tuple[int, bytes, int, bytes]],
         parties: List[Party],
         message_hash: bytes,
     ) -> List[SignedTransaction]:
+        # Verify all r values are the same
         r = partial_signatures[0][0]
+        R_bytes = partial_signatures[0][3]
+        for sig_r, _, _, sig_R in partial_signatures[1:]:
+            if sig_r != r or sig_R != R_bytes:
+                raise ValueError("Inconsistent R values in partial signatures")
 
+        # Combine s values using Lagrange interpolation
         s_combined = 0
-        for i, (_, si) in enumerate(partial_signatures):
+        for i, (_, si, _, _) in enumerate(partial_signatures):
             s_i = int.from_bytes(si, "big")
             lambda_i = self._lagrange_coefficient(
                 parties[: len(partial_signatures)], parties[i].id
@@ -175,31 +237,66 @@ class ThresholdSignatureScheme:
 class EthereumTSS:
     def __init__(self):
         self.tss = ThresholdSignatureScheme()
-        self.shared_randomness = {}
 
     def setup_existing_key(
         self, private_key: int, threshold: int, num_parties: int
     ) -> Tuple[List[Party], str]:
-        parties, group_public_key = self.tss.split_existing_key(
-            private_key, threshold, num_parties
+        """Set up the TSS protocol with an existing private key"""
+        if threshold < 2 or threshold > num_parties:
+            raise ValueError("Invalid threshold value")
+
+        # Generate coefficients for polynomial
+        coefficients = [private_key]
+        for _ in range(threshold - 1):
+            # Use secure random number generation for coefficients
+            coeff = secrets.randbelow(self.tss.curve_order - 1) + 1
+            coefficients.append(coeff)
+
+        parties: List[Party] = []
+        # Generate shares using polynomial evaluation
+        for i in range(num_parties):
+            x = i + 1
+            share = coefficients[0]
+            for j in range(1, threshold):
+                exp = pow(x, j, self.tss.curve_order)
+                term = (coefficients[j] * exp) % self.tss.curve_order
+                share = (share + term) % self.tss.curve_order
+
+            # Generate public key for share
+            private_key_obj = ec.derive_private_key(
+                share, self.tss.curve, default_backend()
+            )
+            public_key = private_key_obj.public_key().public_bytes(
+                encoding=serialization.Encoding.X962,
+                format=serialization.PublicFormat.UncompressedPoint,
+            )
+            parties.append(Party(i + 1, share, public_key))
+
+        # Generate group public key
+        group_public_key = (
+            ec.derive_private_key(private_key, self.tss.curve, default_backend())
+            .public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.X962,
+                format=serialization.PublicFormat.UncompressedPoint,
+            )
         )
         eth_address = self.tss.derive_ethereum_address(group_public_key)
-        self.shared_randomness = {"k": secrets.randbelow(self.tss.curve_order - 1) + 1}
         return parties, eth_address
 
     def create_partial_signature(
-        self, party: Party, message_hash: bytes
-    ) -> Tuple[int, bytes]:
-        return self.tss.create_partial_signature(
-            party, message_hash, self.shared_randomness
-        )
+        self, party: Party, message_hash: bytes, common_seed: bytes = None
+    ) -> Tuple[int, bytes, int, bytes]:
+        """Create partial signature for a party"""
+        return self.tss.create_partial_signature(party, message_hash, common_seed)
 
     def combine_signatures(
         self,
-        partial_signatures: List[Tuple[int, bytes]],
+        partial_signatures: List[Tuple[int, bytes, int, bytes]],
         parties: List[Party],
         message_hash: bytes,
     ) -> List[SignedTransaction]:
+        """Combine partial signatures"""
         return self.tss.combine_partial_signatures(
             partial_signatures, parties, message_hash
         )
@@ -315,12 +412,19 @@ def send_eth_with_tss(
     print(f"\n=== Transaction Hash ===")
     print(f"Message hash: 0x{message_hash.hex()}")
 
+    # Generate a single common seed for all parties
+    common_seed = hashlib.sha256(message_hash + str(nonce).encode()).digest()
+    print("\n=== Common Seed ===")
+    print(f"Common seed: 0x{common_seed.hex()}")
+
     # Generate partial signatures
     print("\n=== Generating Partial Signatures ===")
     partial_signatures = []
     for i in range(threshold):
-        partial_sig = eth_tss.create_partial_signature(parties[i], message_hash)
-        r, s_bytes = partial_sig
+        partial_sig = eth_tss.create_partial_signature(
+            parties[i], message_hash, common_seed
+        )
+        r, s_bytes, k, R_bytes = partial_sig
         # Convert r to hex with proper padding
         r_hex = hex(r)[2:].zfill(64)
         s_hex = s_bytes.hex().zfill(64)
