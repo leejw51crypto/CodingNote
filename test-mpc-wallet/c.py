@@ -132,7 +132,7 @@ class ThresholdSignatureScheme:
 
         # Calculate v with EIP-155 replay protection
         chain_id = 338  # Cronos testnet
-        
+
         # Try both possible v values
         possible_v_values = []
         for base_v in [27, 28]:
@@ -146,13 +146,13 @@ class ThresholdSignatureScheme:
         # Create signature components
         r_bytes = r.to_bytes(32, "big")
         s_bytes = s_combined.to_bytes(32, "big")
-        
+
         # Return all possible signatures
         signatures = []
         for v in possible_v_values:
             v_bytes = v.to_bytes(32, "big")
             sig = r_bytes + s_bytes + v_bytes
-            
+
             # Create SignedTransaction object
             signed_tx = SignedTransaction(
                 rawTransaction=sig,
@@ -162,7 +162,7 @@ class ThresholdSignatureScheme:
                 v=v,
             )
             signatures.append(signed_tx)
-            
+
         return signatures
 
     def derive_ethereum_address(self, group_public_key: bytes) -> str:
@@ -225,20 +225,53 @@ def send_eth_with_tss(
     # Convert hex private key to int for TSS
     private_key_int = int(private_key, 16)
 
+    # Get public key for display purposes
+    private_key_obj = ec.derive_private_key(
+        private_key_int, ec.SECP256K1(), default_backend()
+    )
+    public_key_bytes = private_key_obj.public_key().public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
+    )
+
+    # Display key information
+    print(f"\n=== Key Information ===")
+    # Show only first 2 and last 2 characters of private key
+    masked_private_key = (
+        f"0x{private_key[:2]}{'*' * (len(private_key) - 4)}{private_key[-2:]}"
+    )
+    print(f"Private Key: {masked_private_key}")
+    print(f"Public Key: 0x{public_key_bytes.hex()}")
+
     # Initialize TSS
     eth_tss = EthereumTSS()
     parties, tss_address = eth_tss.setup_existing_key(
         private_key_int, threshold, num_parties
     )
 
+    print(f"Address: {tss_address}")
+
+    print(f"\n=== TSS Setup Information ===")
     print(f"TSS Address: {tss_address}")
     print(f"Threshold: {threshold}")
     print(f"Total Parties: {num_parties}")
 
+    # Display partial secret information
+    for i, party in enumerate(parties):
+        secret_bytes = party.xi.to_bytes(
+            (party.xi.bit_length() + 7) // 8, byteorder="big"
+        )
+        hex_value = secret_bytes.hex()
+        # Show only first 2 and last 2 characters of the hex value
+        masked_hex = f"0x{hex_value[:2]}{'*' * (len(hex_value) - 4)}{hex_value[-2:]}"
+        print(f"\nParty {i+1} Secret Share:")
+        print(f"- Length: {len(secret_bytes)} bytes")
+        print(f"- Value (hex): {masked_hex}")
+
     # Show initial balances
     sender_balance_before = w3.eth.get_balance(tss_address)
     receiver_balance_before = w3.eth.get_balance(to_address)
-    print("\nInitial balances:")
+    print("\n=== Initial Balances ===")
     print(f"Sender balance: {w3.from_wei(sender_balance_before, 'ether')} TCRO")
     print(f"Receiver balance: {w3.from_wei(receiver_balance_before, 'ether')} TCRO")
 
@@ -279,16 +312,30 @@ def send_eth_with_tss(
     # Create RLP encoding of the transaction
     rlp_encoded = rlp.encode(transaction_dict)
     message_hash = Web3.keccak(rlp_encoded)
+    print(f"\n=== Transaction Hash ===")
+    print(f"Message hash: 0x{message_hash.hex()}")
 
     # Generate partial signatures
+    print("\n=== Generating Partial Signatures ===")
     partial_signatures = []
     for i in range(threshold):
         partial_sig = eth_tss.create_partial_signature(parties[i], message_hash)
-        print(f"Party {i+1} partial signature generated")
+        r, s_bytes = partial_sig
+        # Convert r to hex with proper padding
+        r_hex = hex(r)[2:].zfill(64)
+        s_hex = s_bytes.hex().zfill(64)
+        print(f"\nParty {i+1} Partial Signature:")
+        print(f"- r value (hex): 0x{r_hex}")
+        print(
+            f"- r length: {len(r.to_bytes((r.bit_length() + 7) // 8, byteorder='big'))} bytes"
+        )
+        print(f"- s value (hex): 0x{s_hex}")
+        print(f"- s length: {len(s_bytes)} bytes")
         partial_signatures.append(partial_sig)
 
     # Combine signatures
     try:
+        print("\n=== Combining Signatures ===")
         possible_signed_txns = eth_tss.combine_signatures(
             partial_signatures, parties, message_hash
         )
@@ -297,7 +344,20 @@ def send_eth_with_tss(
         final_transaction = None
 
         # Try each possible signature and find the one that matches our TSS address
-        for possible_txn in possible_signed_txns:
+        for idx, possible_txn in enumerate(possible_signed_txns):
+            r_hex = hex(possible_txn.r)[2:].zfill(64)
+            s_hex = hex(possible_txn.s)[2:].zfill(64)
+            print(f"\nTrying signature combination {idx + 1}:")
+            print(f"- r value (hex): 0x{r_hex}")
+            print(f"- s value (hex): 0x{s_hex}")
+            print(f"- v value: {possible_txn.v}")
+            print(
+                f"- r length: {len(possible_txn.r.to_bytes((possible_txn.r.bit_length() + 7) // 8, byteorder='big'))} bytes"
+            )
+            print(
+                f"- s length: {len(possible_txn.s.to_bytes((possible_txn.s.bit_length() + 7) // 8, byteorder='big'))} bytes"
+            )
+
             # Create the final transaction
             test_transaction = rlp.encode(
                 [
@@ -311,20 +371,31 @@ def send_eth_with_tss(
                     w3.to_bytes(hexstr=transaction["to"]),
                     w3.to_bytes(hexstr=hex(transaction["value"])),
                     transaction["data"],
-                    w3.to_bytes(hexstr=hex(possible_txn.v)) if possible_txn.v != 0 else b"\x00",
-                    w3.to_bytes(hexstr=hex(possible_txn.r)) if possible_txn.r != 0 else b"\x00",
-                    w3.to_bytes(hexstr=hex(possible_txn.s)) if possible_txn.s != 0 else b"\x00",
+                    (
+                        w3.to_bytes(hexstr=hex(possible_txn.v))
+                        if possible_txn.v != 0
+                        else b"\x00"
+                    ),
+                    (
+                        w3.to_bytes(hexstr=hex(possible_txn.r))
+                        if possible_txn.r != 0
+                        else b"\x00"
+                    ),
+                    (
+                        w3.to_bytes(hexstr=hex(possible_txn.s))
+                        if possible_txn.s != 0
+                        else b"\x00"
+                    ),
                 ]
             )
 
             # Recover and verify sender address from signature
             recovered_address = w3.eth.account.recover_transaction(test_transaction)
-            print(f"\nTrying signature with v={possible_txn.v}")
             print(f"Recovered sender address: {recovered_address}")
             print(f"Expected TSS address: {tss_address}")
-            
+
             if recovered_address.lower() == tss_address.lower():
-                print("Found matching signature!")
+                print("\n=== Valid Signature Found! ===")
                 signed_txn = possible_txn
                 final_transaction = test_transaction
                 break
@@ -334,11 +405,13 @@ def send_eth_with_tss(
 
         # Send transaction
         tx_hash = w3.eth.send_raw_transaction(final_transaction)
-        print(f"\nTransaction sent! Hash: {tx_hash.hex()}")
+        print(f"\n=== Transaction Sent ===")
+        print(f"Transaction hash: {tx_hash.hex()}")
 
         # Wait for transaction receipt
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-        print(f"Transaction confirmed in block {tx_receipt['blockNumber']}")
+        print(f"\n=== Transaction Confirmed ===")
+        print(f"Block number: {tx_receipt['blockNumber']}")
 
         gas_used = tx_receipt["gasUsed"]
         gas_price = transaction["gasPrice"]
@@ -348,7 +421,7 @@ def send_eth_with_tss(
         # Show final balances
         sender_balance = w3.eth.get_balance(tss_address)
         receiver_balance = w3.eth.get_balance(to_address)
-        print("\nFinal balances:")
+        print("\n=== Final Balances ===")
         print(f"TSS address balance: {w3.from_wei(sender_balance, 'ether')} TCRO")
         print(f"Receiver balance: {w3.from_wei(receiver_balance, 'ether')} TCRO")
         print(f"Gas cost: {w3.from_wei(gas_cost, 'ether')} TCRO")
