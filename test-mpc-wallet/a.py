@@ -19,6 +19,9 @@ from cryptography.hazmat.primitives.asymmetric.utils import (
     encode_dss_signature,
 )
 from cryptography.exceptions import InvalidSignature
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class SecretSharingError(Exception):
@@ -358,7 +361,7 @@ def demonstrate_schemes():
     sss = ShamirSecretSharing(prime)
 
     # Get secret from environment variable
-    secret = int(os.environ.get("TEST_SECRET_NUMBER", "12345"))
+    secret = int(os.getenv("TEST_SECRET_NUMBER"))
     threshold = 2
     num_shares = 3
 

@@ -269,39 +269,49 @@ impl ThresholdSignatureScheme {
             }
         }
 
-        println!("\nCombining signature components:");
+        println!("\n=== Combining Signatures ===");
+        println!("\nCommon Values:");
         println!("R value: 0x{}", hex::encode(first_r.to_bytes_be()));
-
-        // Get k from the first partial signature (just for verification)
-        let k = &partial_signatures[0].k;
-        println!("k value: 0x{}", hex::encode(k.to_bytes_be()));
+        println!(
+            "k value: 0x{}",
+            hex::encode(partial_signatures[0].k.to_bytes_be())
+        );
 
         // Combine the partial s values using Lagrange interpolation
         let mut s_combined = BigUint::zero();
         let active_parties = &parties[..partial_signatures.len()];
 
+        println!("\nPartial Signatures:");
         for (i, sig) in partial_signatures.iter().enumerate() {
             let party = &active_parties[i];
             let lambda_i = self.lagrange_coefficient(active_parties, party.id, 0);
             let s_i = BigUint::from_bytes_be(&sig.s);
-            println!("Party {} s value: 0x{}", party.id, hex::encode(&sig.s));
+
+            // Print individual signature components
+            println!("\nParty {} signature piece:", party.id);
+            println!("s_{}: 0x{}", party.id, hex::encode(&sig.s));
+            println!("λ_{}: 0x{}", party.id, hex::encode(lambda_i.to_bytes_be()));
+
+            // Calculate weighted signature piece
+            let weighted_s = (lambda_i.clone() * s_i.clone()) % &*CURVE_ORDER;
             println!(
-                "Party {} lambda: 0x{}",
+                "λ_{} * s_{}: 0x{}",
                 party.id,
-                hex::encode(lambda_i.to_bytes_be())
+                party.id,
+                hex::encode(weighted_s.to_bytes_be())
             );
 
-            // Apply lambda coefficient to s_i and add to combined s
-            let term = (lambda_i * s_i) % &*CURVE_ORDER;
-            s_combined = (s_combined + term) % &*CURVE_ORDER;
+            // Add to combined signature
+            s_combined = (s_combined + weighted_s) % &*CURVE_ORDER;
+
+            // Show running total
+            println!("Running total: 0x{}", hex::encode(s_combined.to_bytes_be()));
         }
 
-        println!(
-            "Combined s value: 0x{}",
-            hex::encode(s_combined.to_bytes_be())
-        );
-        println!("Group public key length: {}", group_public_key.len());
-        println!("Group public key: 0x{}", hex::encode(group_public_key));
+        println!("\nFinal Combined Signature:");
+        println!("r: 0x{}", hex::encode(first_r.to_bytes_be()));
+        println!("s: 0x{}", hex::encode(s_combined.to_bytes_be()));
+        println!("\nGroup public key: 0x{}", hex::encode(group_public_key));
 
         Ok(CombinedSignature {
             r: first_r.clone(),
@@ -363,6 +373,16 @@ impl EthereumTSS {
             ));
         }
 
+        // Debug: Show first and last byte of private key
+        let pk_bytes = Self::biguint_to_bytes(&private_key);
+        println!("\n=== Private Key Debug Info ===");
+        println!(
+            "Private key: 0x{:02x}..........{:02x} ({} bytes)",
+            pk_bytes[0],
+            pk_bytes[31],
+            pk_bytes.len()
+        );
+
         let mut rng = rand::thread_rng();
         let mut parties = Vec::new();
         let mut coefficients = vec![private_key.clone()];
@@ -373,6 +393,7 @@ impl EthereumTSS {
             coefficients.push(coeff);
         }
 
+        println!("\n=== Participant Shares Debug Info ===");
         // Generate shares for each party
         for i in 1..=num_parties {
             let mut share = coefficients[0].clone();
@@ -386,6 +407,14 @@ impl EthereumTSS {
             }
 
             let share_bytes = Self::biguint_to_bytes(&share);
+            println!(
+                "Participant {}: 0x{:02x}..........{:02x} ({} bytes)",
+                i,
+                share_bytes[0],
+                share_bytes[31],
+                share_bytes.len()
+            );
+
             let secret_key = secp256k1::SecretKey::from_slice(&share_bytes)?;
             let public_key = PublicKey::from_secret_key(&self.tss.secp, &secret_key);
             let public_key_bytes = public_key.serialize_uncompressed().to_vec();
@@ -409,13 +438,15 @@ impl EthereumTSS {
         let hex_address = hex::encode(address);
 
         // print the hex_address
+        println!("\n=== Address Info ===");
         println!("Hex address: {}", hex_address);
-        // Directly use the hex address with 0x prefix
-        let tss_address = format!("0x{}", hex_address);
-        println!("TSS Address: {}", tss_address); // Will show full address
+        println!("TSS Address: 0x{}", hex_address);
+        println!("Threshold: {}", threshold);
+        println!("Total Parties: {}", num_parties);
+
         Ok(TSSKeyData {
             parties,
-            tss_address,
+            tss_address: format!("0x{}", hex_address),
             group_public_key: group_public_key_bytes,
             threshold,
             num_parties,
