@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use anyhow::{anyhow, Result};
 use ethers::{prelude::*, types::Signature};
 use hmac::{Hmac, Mac};
@@ -5,7 +7,8 @@ use num_bigint::{BigUint, RandBigInt};
 use num_traits::{One, Zero};
 use secp256k1::{PublicKey, Secp256k1};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
+use std::env;
 use web3::signing::{keccak256, recover};
 
 // Constants for secp256k1
@@ -757,4 +760,75 @@ pub fn verify_encoded_tx(
     println!("valid recovery_id: {}", valid_recovery_id);
 
     Ok(v_matches && r_matches && s_matches && valid_recovery_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hex;
+    use num_bigint::BigUint;
+    use std::env;
+
+    #[test]
+    fn test_combine_signatures() -> Result<()> {
+        // Initialize TSS
+        let eth_tss = EthereumTSS::new();
+
+        // Get private key from environment variable
+        let private_key_hex = env::var("MY_FULL_PRIVATEKEY")
+            .expect("Environment variable MY_FULL_PRIVATEKEY must be set");
+        let private_key =
+            BigUint::parse_bytes(private_key_hex.trim_start_matches("0x").as_bytes(), 16)
+                .expect("Invalid private key format");
+
+        // Setup TSS wallet with 3 parties and threshold of 2
+        let key_data = eth_tss.setup_existing_key(private_key, 2, 3)?;
+
+        // Create message hash for "hello world"
+        let message = b"hello world";
+        let message_hash = keccak256(message);
+
+        // Generate common seed using same method as Python test
+        let mut seed_input = message_hash.to_vec();
+        seed_input.extend_from_slice(b"test_seed");
+        let common_seed = Sha256::digest(&seed_input).to_vec();
+
+        println!("\n=== Test Message Info ===");
+        println!("Message: {}", String::from_utf8_lossy(message));
+        println!("Message Hash: 0x{}", hex::encode(message_hash));
+        println!("Common Seed: 0x{}", hex::encode(&common_seed));
+
+        // Generate partial signatures with the derived common seed
+        let mut partial_signatures = Vec::new();
+        for i in 0..key_data.threshold {
+            let party = &key_data.parties[i as usize];
+            let partial_sig =
+                eth_tss.create_partial_signature(party, &message_hash, Some(&common_seed), None)?;
+
+            println!("\nParty {} partial signature:", i + 1);
+            println!("r: 0x{}", hex::encode(partial_sig.r.to_bytes_be()));
+            println!("s: 0x{}", hex::encode(&partial_sig.s));
+
+            partial_signatures.push(partial_sig);
+        }
+
+        // Combine the partial signatures
+        let combined_sig = eth_tss.combine_signatures(
+            &partial_signatures,
+            &key_data.parties,
+            &message_hash,
+            &key_data.group_public_key,
+        )?;
+
+        println!("\nCombined signature:");
+        println!("r: 0x{}", hex::encode(combined_sig.r.to_bytes_be()));
+        println!("s: 0x{}", hex::encode(combined_sig.s.to_bytes_be()));
+
+        // Verify the signature
+        let is_valid =
+            eth_tss.verify_signature(&message_hash, &combined_sig, &key_data.group_public_key)?;
+        assert!(is_valid, "Signature verification failed");
+
+        Ok(())
+    }
 }
