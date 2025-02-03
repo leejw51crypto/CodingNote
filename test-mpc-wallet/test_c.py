@@ -31,8 +31,8 @@ def test_combine_partial_signatures():
     print(f"Number of parties (n): {num_parties}")
 
     # Get private key from environment variable
-    private_key_hex = os.environ.get('MY_FULL_PRIVATEKEY')
-    if private_key_hex.startswith('0x'):
+    private_key_hex = os.environ.get("MY_FULL_PRIVATEKEY")
+    if private_key_hex.startswith("0x"):
         private_key_hex = private_key_hex[2:]  # Remove '0x' prefix if present
     private_key = int(private_key_hex, 16)
     print(f"\nUsing private key from environment: {hex(private_key)}")
@@ -102,7 +102,9 @@ def test_combine_partial_signatures():
     print("\n=== Partial Signatures ===")
     partial_sigs = []
     for i in range(threshold):
-        r, s_bytes, k, R_bytes = tss.create_partial_signature(parties[i], message_hash, common_seed)
+        r, s_bytes, k, R_bytes = tss.create_partial_signature(
+            parties[i], message_hash, common_seed
+        )
         partial_sigs.append((r, s_bytes, k, R_bytes))
         print(f"\nPartial signature from Party {i+1}:")
         print(f"  r: {hex(r)}")
@@ -111,7 +113,9 @@ def test_combine_partial_signatures():
 
     print("\n=== Combined Signature Variants ===")
     # Combine signatures using TSS implementation
-    combined_signatures = tss.combine_partial_signatures(partial_sigs, parties, message_hash)
+    combined_signatures = tss.combine_partial_signatures(
+        partial_sigs, parties, message_hash
+    )
 
     for idx, sig in enumerate(combined_signatures, 1):
         print(f"\nTrying signature variant {idx}:")
