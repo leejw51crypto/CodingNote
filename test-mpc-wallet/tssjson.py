@@ -21,9 +21,8 @@ def generate_tss_test_data() -> Dict[str, Any]:
         private_key = private_key[2:]
 
     print("\nGenerating TSS test data...")
-    print(
-        f"Using private key from environment: 0x{private_key[:4]}...{private_key[-4:]}"
-    )
+    # Only show first 4 and last 4 characters of private key
+    print(f"Using private key from environment: 0x{private_key[:4]}...{private_key[-4:]}")
 
     # Setup TSS with 2/3 threshold
     key_data = setup_tss_key(private_key, threshold=2, num_parties=3)
@@ -78,7 +77,7 @@ def generate_tss_test_data() -> Dict[str, Any]:
     # Create test data dictionary
     test_data = {
         "setup": {
-            "private_key": "0x" + private_key,
+            "private_key": f"0x{private_key[:4]}...{private_key[-4:]}",
             "threshold": key_data.threshold,
             "num_parties": key_data.num_parties,
             "tss_address": key_data.tss_address,
@@ -87,7 +86,7 @@ def generate_tss_test_data() -> Dict[str, Any]:
         "parties": [
             {
                 "id": party.id,
-                "private_share": hex(party.xi),
+                "private_share": f"{hex(party.xi)[:6]}...{hex(party.xi)[-4:]}",
                 "public_key": "0x" + party.public_key.hex(),
             }
             for party in key_data.parties
