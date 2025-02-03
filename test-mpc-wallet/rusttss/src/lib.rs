@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
 use ethers::{prelude::*, types::Signature};
+use hmac::{Hmac, Mac};
 use num_bigint::{BigUint, RandBigInt};
 use num_traits::{One, Zero};
 use secp256k1::{PublicKey, Secp256k1};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use web3::signing::{keccak256, recover};
 
 // Constants for secp256k1
@@ -162,6 +163,100 @@ impl ThresholdSignatureScheme {
         (r, r_bytes.to_vec())
     }
 
+    fn bits2int(&self, bits: &[u8]) -> BigUint {
+        let mut b_int = BigUint::from_bytes_be(bits);
+        let l: u64 = (bits.len() * 8) as u64;
+        let qlen = CURVE_ORDER.bits();
+        if l > qlen {
+            b_int >>= (l - qlen) as usize;
+        }
+        b_int
+    }
+
+    fn int2octets(&self, x: &BigUint) -> Vec<u8> {
+        let qlen = CURVE_ORDER.bits();
+        let rlen = qlen.div_ceil(8) as usize;
+        let mut bytes = x.to_bytes_be();
+        if bytes.len() < rlen {
+            let mut padded = vec![0u8; rlen - bytes.len()];
+            padded.extend_from_slice(&bytes);
+            bytes = padded;
+        }
+        bytes
+    }
+
+    fn bits2octets(&self, bits: &[u8]) -> Vec<u8> {
+        let z1 = self.bits2int(bits);
+        let z2 = &z1 % &*CURVE_ORDER;
+        self.int2octets(&z2)
+    }
+
+    fn hmac(&self, key: &[u8], msg: &[u8]) -> Vec<u8> {
+        type HmacSha256 = Hmac<Sha256>;
+        let mut mac = HmacSha256::new_from_slice(key).unwrap();
+        mac.update(msg);
+        mac.finalize().into_bytes().to_vec()
+    }
+
+    fn generate_k_rfc6979(&self, message_hash: &[u8], private_key: &BigUint) -> BigUint {
+        // a. Process m through the hash function H, yielding: h1 = H(m)
+        // (message_hash is already hashed)
+
+        // b. Set: V = 0x01 0x01 0x01 ... 0x01 (32 bytes)
+        let mut v = vec![0x01u8; 32];
+
+        // c. Set: K = 0x00 0x00 0x00 ... 0x00 (32 bytes)
+        let mut k = vec![0x00u8; 32];
+
+        // d. Set: K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1))
+        let x = self.int2octets(private_key);
+        let h1 = self.bits2octets(message_hash);
+        let mut tmp = v.clone();
+        tmp.push(0x00);
+        tmp.extend_from_slice(&x);
+        tmp.extend_from_slice(&h1);
+        k = self.hmac(&k, &tmp);
+
+        // e. Set: V = HMAC_K(V)
+        v = self.hmac(&k, &v);
+
+        // f. Set: K = HMAC_K(V || 0x01 || int2octets(x) || bits2octets(h1))
+        tmp = v.clone();
+        tmp.push(0x01);
+        tmp.extend_from_slice(&x);
+        tmp.extend_from_slice(&h1);
+        k = self.hmac(&k, &tmp);
+
+        // g. Set: V = HMAC_K(V)
+        v = self.hmac(&k, &v);
+
+        // h. Apply the following algorithm until a proper value is found for k
+        loop {
+            let mut t = Vec::new();
+            while t.len() < 32 {
+                v = self.hmac(&k, &v);
+                t.extend_from_slice(&v);
+            }
+
+            let k_candidate = self.bits2int(&t);
+            if k_candidate >= BigUint::one() && k_candidate < *CURVE_ORDER {
+                return k_candidate;
+            }
+
+            // If k is not suitable, update K and V and try again
+            tmp = v.clone();
+            tmp.push(0x00);
+            k = self.hmac(&k, &tmp);
+            v = self.hmac(&k, &v);
+        }
+    }
+
+    fn generate_base_k(&self, message_hash: &[u8], common_seed: &[u8]) -> BigUint {
+        // Use common_seed as private key input to ensure all parties generate same k
+        let seed_int = BigUint::from_bytes_be(common_seed) % &*CURVE_ORDER;
+        self.generate_k_rfc6979(message_hash, &seed_int)
+    }
+
     pub fn create_partial_signature(
         &self,
         party: &Party,
@@ -171,12 +266,8 @@ impl ThresholdSignatureScheme {
     ) -> Result<PartialSignature> {
         // Use provided k value from common seed
         let k_value = if let Some(seed) = common_seed {
-            // Generate k value from common seed and message hash
-            let mut hasher = Sha256::new();
-            hasher.update(message_hash);
-            hasher.update(seed);
-            let hash = hasher.finalize();
-            BigUint::from_bytes_be(hash.as_slice()) % &*CURVE_ORDER
+            // Generate deterministic k value using RFC 6979
+            self.generate_base_k(message_hash, seed)
         } else {
             return Err(anyhow!("Common seed (k value) is required"));
         };
