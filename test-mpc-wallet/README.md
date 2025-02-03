@@ -71,3 +71,26 @@ The project is configured to work with Cronos testnet:
 - eth-account==0.11.0
 - cryptography==42.0.5
 - python-dotenv==1.0.1
+
+## Testing Partial Signatures
+
+You can test the partial signature functionality using both Python and Rust implementations:
+
+### Python Implementation
+```bash
+python testjson.py
+```
+This will run the Python implementation of TSS partial signature generation and verification.
+
+### Rust Implementation
+```bash
+cd rusttss
+cargo run --example tssjsonread
+```
+This will run the Rust implementation which:
+- Reads TSS test data from JSON
+- Verifies partial signatures
+- Combines signatures
+- Validates the final combined signature
+
+Both implementations should produce matching results, verifying the correctness of the TSS implementation across different languages.
