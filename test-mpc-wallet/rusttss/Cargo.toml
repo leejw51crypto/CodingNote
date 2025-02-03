@@ -35,3 +35,7 @@ path = "examples/tss.rs"
 [[example]]
 name = "sendtx"
 path = "examples/sendtx.rs"
+
+[[example]]
+name = "tssjsonread"
+path = "examples/tssjsonread.rs"
