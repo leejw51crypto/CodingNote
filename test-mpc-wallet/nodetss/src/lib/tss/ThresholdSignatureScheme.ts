@@ -435,31 +435,19 @@ export class ThresholdSignatureScheme {
         s_combined = BigNumber.from(this.curveOrder.toString()).sub(s_combined);
       }
 
-      // Try both possible v values
-      const chainId = 338; // Cronos testnet
+      // Try both possible v values (27 and 28)
       let finalSignature: { r: string; s: string; v: number } | undefined;
       let finalTxHash: string | undefined;
 
-      // Try v=27 first (which will become v=711 for EIP-155)
       for (const base_v of [27, 28]) {
-        const eip155_v = chainId * 2 + 35 + (base_v - 27);
-        this.log(`Testing signature with v=${eip155_v} (base_v=${base_v})`);
-
-        // Use base_v for recovery
+        // Create recovery signature with base v value
         const recoverySignature = {
           r: r.toHexString(),
           s: s_combined.toHexString(),
           v: base_v,
         };
 
-        // Create EIP-155 signature
-        const eip155Signature = {
-          r: r.toHexString(),
-          s: s_combined.toHexString(),
-          v: eip155_v,
-        };
-
-        // Verify the signature recovers to the correct address using base_v
+        // Verify the signature recovers to the correct address
         const recoveredAddress = ethers.recoverAddress(
           messageHash,
           recoverySignature,
@@ -469,54 +457,32 @@ export class ThresholdSignatureScheme {
         this.log("Signature verification result", {
           recoveredAddress,
           expectedAddress,
+          base_v,
           match:
             recoveredAddress.toLowerCase() === expectedAddress.toLowerCase(),
         });
 
-        // If we find a match with base_v=27 (which gives v=711), use it immediately
-        // Otherwise, store the first valid signature we find
         if (recoveredAddress.toLowerCase() === expectedAddress.toLowerCase()) {
-          if (eip155_v === 711) {
-            finalSignature = eip155Signature;
-            finalTxHash = ethers.keccak256(
-              ethers.concat([
-                messageHash,
-                arrayify(r),
-                arrayify(s_combined),
-                arrayify(eip155_v),
-              ]),
-            );
-            break;
-          } else if (!finalSignature) {
-            finalSignature = eip155Signature;
-            finalTxHash = ethers.keccak256(
-              ethers.concat([
-                messageHash,
-                arrayify(r),
-                arrayify(s_combined),
-                arrayify(eip155_v),
-              ]),
-            );
-          }
-        }
-      }
+          // Calculate EIP-155 v value
+          const chainId = 338; // Cronos testnet
+          const eip155_v = chainId * 2 + 35 + (base_v - 27);
 
-      // If we didn't find a valid signature with v=711 but found one with v=712,
-      // force the v value to be 711 since that's what the test expects
-      if (finalSignature && finalSignature.v === 712) {
-        finalSignature = {
-          r: finalSignature.r,
-          s: finalSignature.s,
-          v: 711,
-        };
-        finalTxHash = ethers.keccak256(
-          ethers.concat([
-            messageHash,
-            arrayify(r),
-            arrayify(s_combined),
-            arrayify(711),
-          ]),
-        );
+          finalSignature = {
+            r: r.toHexString(),
+            s: s_combined.toHexString(),
+            v: eip155_v,
+          };
+
+          finalTxHash = ethers.keccak256(
+            ethers.concat([
+              messageHash,
+              arrayify(r),
+              arrayify(s_combined),
+              arrayify(eip155_v),
+            ]),
+          );
+          break;
+        }
       }
 
       if (!finalSignature) {
@@ -528,9 +494,9 @@ export class ThresholdSignatureScheme {
 
       this.log("Successfully combined signatures", {
         finalSignature,
-        baseV: finalSignature.v === 711 ? 27 : 28,
+        baseV: ((finalSignature.v - 35 - 338 * 2) % 2) + 27,
         eip155V: finalSignature.v,
-        chainId,
+        chainId: 338,
         txHash: finalTxHash,
       });
 

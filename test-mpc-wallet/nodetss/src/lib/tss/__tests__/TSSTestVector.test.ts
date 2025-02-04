@@ -199,7 +199,7 @@ describe("TSS Test Vector Verification", () => {
         const recoverySignature = {
           r: sig.r,
           s: sig.s,
-          v: sig.v % 2,
+          v: sig.v,
         };
         const recoveredAddress = ethers.recoverAddress(
           messageHash,

@@ -5,6 +5,7 @@ from web3 import Web3
 from typing import Dict, Any
 import os
 from dotenv import load_dotenv
+from eth_account import Account
 
 
 def generate_tss_test_data() -> Dict[str, Any]:
@@ -68,11 +69,39 @@ def generate_tss_test_data() -> Dict[str, Any]:
         partial_signatures, key_data.parties, message_hash
     )
 
-    # Get the valid signature (first one that matches TSS address)
-    valid_sig = None
+    # Get all valid signatures that recover to the TSS address
+    valid_sigs = []
     for signed_txn in possible_signed_txns:
-        valid_sig = {"r": hex(signed_txn.r), "s": hex(signed_txn.s), "v": signed_txn.v}
-        break
+        vrs = (signed_txn.v, signed_txn.r, signed_txn.s)
+        try:
+            recovered_address = Account._recover_hash(message_hash, vrs=vrs)
+            if recovered_address.lower() == key_data.tss_address.lower():
+                valid_sigs.append(
+                    {
+                        "r": hex(signed_txn.r),
+                        "s": hex(signed_txn.s),
+                        "v": signed_txn.v,
+                        "recovered_address": recovered_address,
+                    }
+                )
+        except Exception as e:
+            print(f"Failed to verify signature variant: {str(e)}")
+            continue
+
+    if not valid_sigs:
+        raise ValueError("No valid signatures found that recover to TSS address")
+
+    print("\nFound valid signatures:")
+    for sig in valid_sigs:
+        print(f"v={sig['v']}, recovered_address={sig['recovered_address']}")
+
+    # Use the first valid signature for the test vector, but note that others are valid too
+    valid_sig = {
+        "r": valid_sigs[0]["r"],
+        "s": valid_sigs[0]["s"],
+        "v": valid_sigs[0]["v"],
+        "note": "Other v values may also be valid as long as they recover to the correct address",
+    }
 
     # Create test data dictionary
     test_data = {
