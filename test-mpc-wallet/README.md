@@ -100,6 +100,23 @@ The script will:
 3. Combine signatures to create a valid transaction
 4. Send the transaction to the Cronos testnet
 
+## Gradio Web Interface
+
+The project includes a user-friendly web interface built with Gradio (`tswallet_gradio.py`). To run the interface:
+
+```bash
+python tswallet_gradio.py
+```
+
+The Gradio interface provides:
+- TSS wallet initialization with private key input
+- TSS setup verification
+- Transaction sending functionality
+- Real-time balance checking
+- User-friendly interface for interacting with the TSS wallet
+
+⚠️ **Important**: The Gradio interface is for demonstration and educational purposes only. Never use real private keys in this interface.
+
 ## Security Considerations
 
 - Keep your private key secure and never share it
@@ -120,6 +137,7 @@ The project is configured to work with Cronos testnet:
 - eth-account==0.11.0
 - cryptography==42.0.5
 - python-dotenv==1.0.1
+- gradio==4.19.2
 
 ### Rust
 See `rusttss/Cargo.toml` for Rust dependencies
