@@ -72,8 +72,8 @@ python tssjson.py
 ### Rust Tests
 ```bash
 cd rusttss
-cargo test -- --nocapture
-cargo run --example tssjsonread
+# Run all tests including TSS implementation and test vector verification
+source .env && cargo test -- --nocapture
 cd ..
 ```
 
