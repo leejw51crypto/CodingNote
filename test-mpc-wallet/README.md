@@ -73,6 +73,7 @@ python tssjson.py
 ```bash
 cd rusttss
 cargo test -- --nocapture
+cargo run --example tssjsonread
 cd ..
 ```
 
