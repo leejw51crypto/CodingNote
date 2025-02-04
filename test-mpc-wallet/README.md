@@ -9,11 +9,14 @@ This project implements a Multi-Party Computation (MPC) wallet using Threshold S
 - Ethereum transaction signing with multiple parties
 - Configurable threshold and number of parties
 - Cronos testnet integration
+- Cross-language implementations (Python, Rust, Node.js)
 
 ## Prerequisites
 
 - Python 3.8+
 - pip (Python package manager)
+- Rust (for Rust implementation)
+- Node.js and Yarn (for Node.js implementation)
 
 ## Installation
 
@@ -25,7 +28,18 @@ cd test-mpc-wallet
 
 2. Install dependencies:
 ```bash
+# Python dependencies
 pip install -r requirements.txt
+
+# Rust dependencies (optional)
+cd rusttss
+cargo build
+cd ..
+
+# Node.js dependencies (optional)
+cd nodetss
+yarn install
+cd ..
 ```
 
 3. Set up environment variables:
@@ -36,6 +50,39 @@ cp .env.example .env
 Edit `.env` file and add your private key:
 ```
 MY_FULL_PRIVATEKEY=your_private_key_here  # Without 0x prefix
+```
+
+## Testing Vector Tutorial
+
+The project includes comprehensive test vectors to verify TSS implementation across different languages. Here's how to run the tests:
+
+1. Generate test vectors:
+```bash
+# This will create tss_test_data.json for cross-implementation testing
+python tssjson.py
+```
+
+2. Run tests in different implementations:
+
+### Python Tests
+```bash
+python tssjson.py
+```
+
+### Rust Tests
+```bash
+cd rusttss
+cargo test -- --nocapture
+cd ..
+```
+
+### Node.js Tests
+```bash
+cd nodetss
+yarn test                               # Run all tests
+yarn test TSSTestVector.test.ts        # Run specific test vector tests
+yarn test ThresholdSignatureScheme.test.ts  # Run TSS implementation tests
+cd ..
 ```
 
 ## Usage
@@ -67,30 +114,16 @@ The project is configured to work with Cronos testnet:
 
 ## Dependencies
 
+### Python
 - web3==6.15.1
 - eth-account==0.11.0
 - cryptography==42.0.5
 - python-dotenv==1.0.1
 
-## Testing Partial Signatures
+### Rust
+See `rusttss/Cargo.toml` for Rust dependencies
 
-You can test the partial signature functionality using both Python and Rust implementations:
+### Node.js
+See `nodetss/package.json` for Node.js dependencies
 
-### Python Implementation
-```bash
-python testjson.py
-```
-This will run the Python implementation of TSS partial signature generation and verification.
 
-### Rust Implementation
-```bash
-cd rusttss
-cargo run --example tssjsonread
-```
-This will run the Rust implementation which:
-- Reads TSS test data from JSON
-- Verifies partial signatures
-- Combines signatures
-- Validates the final combined signature
-
-Both implementations should produce matching results, verifying the correctness of the TSS implementation across different languages.
