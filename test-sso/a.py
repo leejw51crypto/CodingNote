@@ -19,6 +19,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List
+import random
 
 
 # Simulate blockchain kernel level
@@ -52,7 +53,7 @@ class SystemContract:
 
     sessions: Dict[str, Dict] = (
         {}
-    )  # Maps session_key -> {main_address, permissions, created_at}
+    )  # Maps session_key -> {main_address, contract_address, permissions, created_at}
 
     @classmethod
     def register_session_key(
@@ -62,8 +63,12 @@ class SystemContract:
         Register a new session key with its permissions.
         In real implementation, this would be a smart contract call.
         """
+        # Generate a unique smart contract address for this session
+        contract_address = f"0x{secrets.token_hex(20)}"
+
         cls.sessions[session_key] = {
             "main_address": main_address,  # Original wallet address
+            "contract_address": contract_address,  # Smart contract address for SSO
             "permissions": permissions,  # Limited permissions for this session
             "created_at": datetime.now(),  # Timestamp for expiry calculation
         }
@@ -129,9 +134,9 @@ class ZkSync:
         Send a transaction, either directly or via session key.
 
         Important:
-        - The from_address is always the main wallet address, not a contract address
-        - Session key transactions are indistinguishable from regular transactions
-        - Receivers cannot tell if a transaction used SSO or not
+        - When using SSO (session key), the from_address is the smart contract address
+        - Regular transactions use the main wallet address
+        - True sender can be verified through transaction calldata and SSO contract
         """
         # If using session key, validate it through kernel
         if session_key:
@@ -148,11 +153,123 @@ class ZkSync:
             ):
                 raise Exception("Session key expired")
 
-        print("### Transaction Details")
-        print(f"* Status: ✅ Success")
-        print(f"* From: `{from_address}`")  # Always shows main wallet address
-        print(f"* To: `{to_address}`")
-        print(f"* Amount: **{amount} ETH**")
+            # Create transaction response with SSO details
+            tx_response = TransactionResponse(
+                tx_hash=f"0x{secrets.token_hex(32)}",
+                status=True,
+                from_address=session["contract_address"],
+                to_address=to_address,
+                amount=amount,
+                block_number=random.randint(1000000, 9999999),
+                timestamp=datetime.now(),
+                is_sso_tx=True,
+                true_sender=from_address,
+                sso_contract=session["contract_address"],
+                calldata={
+                    "session_key_id": session_key[:10] + "...",
+                    "nonce": random.randint(1, 1000),
+                    "signature": f"0x{secrets.token_hex(64)}",
+                },
+                paymaster_data={
+                    "contract_version": "v1.0.0",
+                    "implementation": f"0x{secrets.token_hex(20)}",
+                    "session_registry": f"0x{secrets.token_hex(20)}",
+                },
+            )
+        else:
+            # Regular transaction response
+            tx_response = TransactionResponse(
+                tx_hash=f"0x{secrets.token_hex(32)}",
+                status=True,
+                from_address=from_address,
+                to_address=to_address,
+                amount=amount,
+                block_number=random.randint(1000000, 9999999),
+                timestamp=datetime.now(),
+                is_sso_tx=False,
+            )
+
+        tx_response.display()
+
+
+@dataclass
+class TransactionResponse:
+    """
+    Represents a detailed transaction response including SSO-specific information.
+    This shows how receivers can identify the true sender of SSO transactions.
+
+    For SSO transactions:
+    - from_address is the SSO smart contract address
+    - true_sender is the original wallet address
+    - Verification can be done through system contract calls and paymaster data
+    """
+
+    tx_hash: str
+    status: bool
+    from_address: str  # Smart contract address for SSO txs
+    to_address: str
+    amount: float
+    block_number: int
+    timestamp: datetime
+    # SSO specific fields
+    is_sso_tx: bool
+    true_sender: str = None  # Original wallet address for SSO txs
+    sso_contract: str = None
+    calldata: Dict = None  # Contains SSO verification data
+    paymaster_data: Dict = None  # Contains additional verification data
+
+    def display(self):
+        print("\n### Transaction Details")
+        print(f"* Status: {'✅ Success' if self.status else '❌ Failed'}")
+        print(f"* Transaction Hash: `{self.tx_hash}`")
+        print(f"* Block Number: {self.block_number}")
+        print(f"* Timestamp: {self.timestamp}")
+
+        if self.is_sso_tx:
+            print(f"* From (SSO Contract): `{self.from_address}`")
+        else:
+            print(f"* From: `{self.from_address}`")
+
+        print(f"* To: `{self.to_address}`")
+        print(f"* Amount: **{self.amount} ETH**")
+
+        if self.is_sso_tx:
+            print("\n### SSO Transaction Information")
+            print("* This is an SSO (Smart Sign-On) transaction")
+            print(f"* True Sender (Original Wallet): `{self.true_sender}`")
+            print(f"* SSO Contract: `{self.sso_contract}`")
+
+            print("\n### Transaction Calldata")
+            print("* Verification Data:")
+            print(f"  * Session Key ID: `{self.calldata['session_key_id']}`")
+            print(f"  * Nonce: {self.calldata['nonce']}")
+            print(f"  * Signature: `{self.calldata['signature']}`")
+
+            print("\n### Paymaster Data")
+            print("* SSO System Contract Data:")
+            print(f"  * Contract Version: `{self.paymaster_data['contract_version']}`")
+            print(f"  * Implementation: `{self.paymaster_data['implementation']}`")
+            print(f"  * Session Registry: `{self.paymaster_data['session_registry']}`")
+
+            print("\n### How to Verify True Sender")
+            print(
+                "1. This transaction was sent through SSO contract `{self.from_address}`"
+            )
+            print("2. To verify the true sender, you can:")
+            print("   a) Call the SSO system contract:")
+            print(f"      * getSessionInfo({self.calldata['session_key_id']})")
+            print("   b) Check session registry:")
+            print(f"      * Contract: `{self.paymaster_data['session_registry']}`")
+            print(
+                f"      * Method: isValidSession({self.true_sender}, {self.calldata['session_key_id']})"
+            )
+            print("   c) Verify transaction signature:")
+            print(f"      * Signer: `{self.true_sender}`")
+            print(f"      * Signature: `{self.calldata['signature']}`")
+            print("3. On-chain verification:")
+            print(f"   * The SSO contract at `{self.sso_contract}`")
+            print(f"   * Confirms wallet `{self.true_sender}` as true sender")
+            print("   * Through zkSync Era's native SSO verification")
 
 
 def main():
@@ -163,9 +280,12 @@ def main():
     2. Generate a session key with limited permissions (for SSO)
     3. Demonstrate transaction sending with session key validation
     4. Show how permission limits are enforced
+    5. Demonstrate how receivers can identify true sender in SSO transactions
 
-    Note: In a real application, the session key would be used to authenticate
-    with various dApps without needing the main wallet for every action.
+    Note: In a real application:
+    - The session key would be used to authenticate with various dApps
+    - Receivers can verify the true sender through transaction calldata
+    - The SSO contract provides cryptographic proof of the true sender
     """
     # Initialize zkSync
     zksync = ZkSync()
