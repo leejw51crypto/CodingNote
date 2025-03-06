@@ -422,8 +422,8 @@ def main():
     # List available models
     models = list_available_models()
 
-    # Default to llama3 if available, otherwise use the first model
-    default_model = "llama3"
+    # Default to qwq if available, otherwise use the first model
+    default_model = "qwq"
     if models:
         model_names = [model.get("name") for model in models]
         if default_model not in model_names and model_names:
