@@ -9,3 +9,9 @@ struct Book {
   title @0 :Text;
   author @1 :Author;
 }
+
+struct Library {
+  name @0 :Text;
+  books @1 :List(Book);
+}
+
