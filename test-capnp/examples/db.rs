@@ -4,15 +4,15 @@ use capnp::serialize_packed;
 use fake::faker::company::en::CompanyName;
 use fake::faker::internet::en::SafeEmail;
 use fake::faker::name::en::Name;
-use fake::{Fake, Faker};
+use fake::Fake;
 use hex;
-use std::io::Write;
+use anyhow::{Result, Context};
 
 pub mod book_capnp {
     include!(concat!(env!("OUT_DIR"), "/book_capnp.rs"));
 }
 
-fn main() {
+fn main() -> Result<()> {
     println!("=== Creating Library Data ===");
     // Create a library with 10 random books
     let mut message = Builder::new_default();
@@ -28,7 +28,7 @@ fn main() {
         book.set_title(&title);
 
         {
-            let mut author = book.get_author().unwrap();
+            let mut author = book.get_author()?;
             let name: String = Name().fake();
             let email: String = SafeEmail().fake();
             author.set_name(&name);
@@ -40,17 +40,22 @@ fn main() {
     println!("\n=== Serialization ===");
     // First serialize to a Vec
     let mut raw_data = Vec::new();
-    write_message(&mut raw_data, &message).unwrap();
+    write_message(&mut raw_data, &message).context("Failed to serialize message")?;
     println!("Raw serialized size: {} bytes", raw_data.len());
 
     // Now create packed data
     let mut packed_output = Vec::new();
-    serialize_packed::write_message(&mut packed_output, &message).unwrap();
+    serialize_packed::write_message(&mut packed_output, &message)
+        .context("Failed to write packed message")?;
 
     println!("Packed serialized size: {} bytes", packed_output.len());
+    
+    // Convert to f64 early to avoid precision loss warning
+    let raw_len = raw_data.len() as f64;
+    let packed_len = packed_output.len() as f64;
     println!(
         "Compression ratio: {:.2}%",
-        (1.0 - packed_output.len() as f64 / raw_data.len() as f64) * 100.0
+        (1.0 - packed_len / raw_len) * 100.0
     );
 
     // Print hex dump of packed data
@@ -63,23 +68,26 @@ fn main() {
     println!("\n=== Deserialization ===");
     // Deserialize from packed format
     let message_reader =
-        serialize_packed::read_message(&mut &packed_output[..], ReaderOptions::new()).unwrap();
+        serialize_packed::read_message(&mut &packed_output[..], ReaderOptions::new())
+            .context("Failed to read packed message")?;
 
     let library_reader = message_reader
         .get_root::<book_capnp::library::Reader>()
-        .unwrap();
+        .context("Failed to get library root")?;
     println!("Successfully deserialized library");
-    println!("\nLibrary name: {:?}", library_reader.get_name().unwrap());
+    println!("\nLibrary name: {:?}", library_reader.get_name()?);
     println!("\nBooks in library:");
 
-    let books = library_reader.get_books().unwrap();
+    let books = library_reader.get_books()?;
     for book in books.iter() {
-        let author = book.get_author().unwrap();
-        println!("\nTitle: {:?}", book.get_title().unwrap());
+        let author = book.get_author()?;
+        println!("\nTitle: {:?}", book.get_title()?);
         println!(
             "Author: {:?} ({:?})",
-            author.get_name().unwrap(),
-            author.get_email().unwrap()
+            author.get_name()?,
+            author.get_email()?
         );
     }
+    
+    Ok(())
 }
