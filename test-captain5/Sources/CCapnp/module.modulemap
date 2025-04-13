@@ -1,0 +1,5 @@
+module CCapnp [system] {
+    header "include/book_wrapper.h"
+    link "book_wrapper"
+    export *
+} 

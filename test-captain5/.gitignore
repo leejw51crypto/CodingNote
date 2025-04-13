@@ -1,0 +1,8 @@
+build/
+.build/
+node_modules/
+cpp_main
+swift_main
+dist/
+proto/*.js
+proto/*.ts

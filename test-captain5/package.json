@@ -1,0 +1,29 @@
+{
+  "name": "test-capnp",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/example.js",
+  "types": "dist/example.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/example.js",
+    "dev": "tsc -w",
+    "clean": "rm -rf dist",
+    "rebuild": "yarn clean && yarn build",
+    "generate": "yarn capnp-es proto/book.capnp -ojs,ts,dts"
+  },
+  "keywords": [
+    "capnp",
+    "test"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "capnp-es": "^0.0.9"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2"
+  }
+} 
