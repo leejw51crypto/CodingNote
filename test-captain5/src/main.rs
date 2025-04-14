@@ -2,7 +2,6 @@ use capnp::message::{Builder, ReaderOptions};
 use capnp::serialize;
 use chrono::Local;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use serde::{Deserialize, Serialize};
 use std::io::{self, BufReader, BufWriter, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,91 +12,6 @@ use std::time::Duration;
 // Include the generated code
 mod generated;
 use generated::proto::book_capnp;
-
-// Message type enum to identify the type of message being sent
-#[derive(Debug, Serialize, Deserialize)]
-enum MessageType {
-    Book,
-    Fruit,
-}
-
-// Define Serde-compatible structs that match our Cap'n Proto schema
-#[derive(Debug, Serialize, Deserialize)]
-struct Book {
-    title: String,
-    author: String,
-    pages: u32,
-    publish_year: u16,
-    is_available: bool,
-    genres: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Fruit {
-    name: String,
-    color: String,
-    weight_grams: u32,
-    is_ripe: bool,
-    variety: String,
-}
-
-impl Fruit {
-    // Convert from Cap'n Proto to our Rust struct
-    fn from_capnp(reader: book_capnp::fruit::Reader) -> Result<Self, capnp::Error> {
-        Ok(Fruit {
-            name: reader.get_name()?.to_str()?.to_string(),
-            color: reader.get_color()?.to_str()?.to_string(),
-            weight_grams: reader.get_weight_grams(),
-            is_ripe: reader.get_is_ripe(),
-            variety: reader.get_variety()?.to_str()?.to_string(),
-        })
-    }
-
-    // Convert from our Rust struct to Cap'n Proto
-    fn to_capnp(&self, builder: &mut book_capnp::fruit::Builder) {
-        builder.set_name(self.name.as_str().into());
-        builder.set_color(self.color.as_str().into());
-        builder.set_weight_grams(self.weight_grams);
-        builder.set_is_ripe(self.is_ripe);
-        builder.set_variety(self.variety.as_str().into());
-    }
-}
-
-impl Book {
-    // Convert from Cap'n Proto to our Rust struct
-    fn from_capnp(reader: book_capnp::book::Reader) -> Result<Self, capnp::Error> {
-        let genres = reader
-            .get_genres()?
-            .iter()
-            .map(|g| g.unwrap().to_str().unwrap().to_string())
-            .collect();
-
-        Ok(Book {
-            title: reader.get_title()?.to_str()?.to_string(),
-            author: reader.get_author()?.to_str()?.to_string(),
-            pages: reader.get_pages(),
-            publish_year: reader.get_publish_year(),
-            is_available: reader.get_is_available(),
-            genres,
-        })
-    }
-
-    // Convert from our Rust struct to Cap'n Proto
-    fn to_capnp(&self, builder: &mut book_capnp::book::Builder) {
-        builder.set_title(self.title.as_str().into());
-        builder.set_author(self.author.as_str().into());
-        builder.set_pages(self.pages);
-        builder.set_publish_year(self.publish_year);
-        builder.set_is_available(self.is_available);
-
-        {
-            let mut genres = builder.reborrow().init_genres(self.genres.len() as u32);
-            for (i, genre) in self.genres.iter().enumerate() {
-                genres.set(i as u32, genre.as_str().into());
-            }
-        }
-    }
-}
 
 fn create_sample_book() -> Builder<capnp::message::HeapAllocator> {
     let mut message = Builder::new_default();
@@ -145,37 +59,52 @@ fn deserialize_and_print(data: &[u8]) {
         .get_root::<book_capnp::book::Reader>()
         .expect("Failed to get root");
 
-    // Convert to our Rust struct
-    let book = Book::from_capnp(book_reader).expect("Failed to convert to Book");
-
-    // Print as JSON
-    let json = serde_json::to_string_pretty(&book).expect("Failed to serialize to JSON");
-    println!("As JSON:\n{}\n", json);
+    println!("Book details:");
+    println!(
+        "Title: {}",
+        book_reader.get_title().unwrap().to_str().unwrap()
+    );
+    println!(
+        "Author: {}",
+        book_reader.get_author().unwrap().to_str().unwrap()
+    );
+    println!("Pages: {}", book_reader.get_pages());
+    println!("Publish Year: {}", book_reader.get_publish_year());
+    println!("Is Available: {}", book_reader.get_is_available());
+    println!(
+        "Genres: {:?}",
+        book_reader
+            .get_genres()
+            .unwrap()
+            .iter()
+            .map(|g| g.unwrap().to_str().unwrap())
+            .collect::<Vec<_>>()
+    );
 }
 
 fn modify_book_title(data: &[u8], new_title: &str) -> Vec<u8> {
-    // Create a new message
     let mut message = Builder::new_default();
     {
-        // Read the old message
         let reader = serialize::read_message(&mut &data[..], ReaderOptions::new())
             .expect("Failed to read message");
         let old_book = reader
             .get_root::<book_capnp::book::Reader>()
             .expect("Failed to get root");
 
-        // Convert to Rust struct
-        let mut book = Book::from_capnp(old_book).expect("Failed to convert to Book");
-
-        // Modify the title
-        book.title = new_title.to_string();
-
-        // Convert back to Cap'n Proto
         let mut new_book = message.init_root::<book_capnp::book::Builder>();
-        book.to_capnp(&mut new_book);
+        new_book.set_title(new_title.into());
+        new_book.set_author(old_book.get_author().unwrap());
+        new_book.set_pages(old_book.get_pages());
+        new_book.set_publish_year(old_book.get_publish_year());
+        new_book.set_is_available(old_book.get_is_available());
+
+        let old_genres = old_book.get_genres().unwrap();
+        let mut new_genres = new_book.init_genres(old_genres.len());
+        for (i, genre) in old_genres.iter().enumerate() {
+            new_genres.set(i as u32, genre.unwrap());
+        }
     }
 
-    // Serialize the modified message
     serialize_message(&message)
 }
 
@@ -252,35 +181,30 @@ fn stream_reader(stream: TcpStream, running: Arc<AtomicBool>) -> std::result::Re
 
                 match root.which()? {
                     book_capnp::message::Which::Book(Ok(book)) => {
-                        let book = Book {
-                            title: book.get_title()?.to_str()?.to_string(),
-                            author: book.get_author()?.to_str()?.to_string(),
-                            pages: book.get_pages(),
-                            publish_year: book.get_publish_year(),
-                            is_available: book.get_is_available(),
-                            genres: book
-                                .get_genres()?
+                        println!("\nReceived Book:");
+                        println!("Title: {}", book.get_title()?.to_str()?);
+                        println!("Author: {}", book.get_author()?.to_str()?);
+                        println!("Pages: {}", book.get_pages());
+                        println!("Publish Year: {}", book.get_publish_year());
+                        println!("Is Available: {}", book.get_is_available());
+                        println!(
+                            "Genres: {:?}",
+                            book.get_genres()?
                                 .iter()
-                                .map(|g| g.unwrap().to_str().unwrap().to_string())
-                                .collect(),
-                        };
-                        println!("\nReceived Book: {}", serde_json::to_string_pretty(&book)?);
+                                .map(|g| g.unwrap().to_str().unwrap())
+                                .collect::<Vec<_>>()
+                        );
                     }
                     book_capnp::message::Which::Book(Err(e)) => {
                         eprintln!("Error reading book: {}", e);
                     }
                     book_capnp::message::Which::Fruit(Ok(fruit)) => {
-                        let fruit = Fruit {
-                            name: fruit.get_name()?.to_str()?.to_string(),
-                            color: fruit.get_color()?.to_str()?.to_string(),
-                            weight_grams: fruit.get_weight_grams(),
-                            is_ripe: fruit.get_is_ripe(),
-                            variety: fruit.get_variety()?.to_str()?.to_string(),
-                        };
-                        println!(
-                            "\nReceived Fruit: {}",
-                            serde_json::to_string_pretty(&fruit)?
-                        );
+                        println!("\nReceived Fruit:");
+                        println!("Name: {}", fruit.get_name()?.to_str()?);
+                        println!("Color: {}", fruit.get_color()?.to_str()?);
+                        println!("Weight: {}g", fruit.get_weight_grams());
+                        println!("Is Ripe: {}", fruit.get_is_ripe());
+                        println!("Variety: {}", fruit.get_variety()?.to_str()?);
                     }
                     book_capnp::message::Which::Fruit(Err(e)) => {
                         eprintln!("Error reading fruit: {}", e);

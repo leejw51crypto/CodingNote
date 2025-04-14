@@ -5,8 +5,8 @@ fn main() {
     fs::create_dir_all("src/generated").expect("Failed to create generated directory");
 
     capnpc::CompilerCommand::new()
-        .src_prefix(".")
-        .file("./proto/book.capnp")
+        .src_prefix("proto")
+        .file("proto/book.capnp")
         .output_path("src/generated")
         .run()
         .expect("schema compiler command failed");
