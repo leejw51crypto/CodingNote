@@ -1,0 +1,10 @@
+[package]
+name = "test-flexbuffer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+flexbuffers = "2.0.0"
+fake = { version = "2.6.1", features = ["derive"] }
+rand = "0.8.5"
+serde = { version = "1.0", features = ["derive"] }
