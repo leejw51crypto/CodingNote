@@ -156,6 +156,112 @@ def execute_bigquery(bq_client, project_id, sql_query):
         return None
 
 
+def convert_results_to_text(results):
+    """Convert BigQuery results to text format for AI processing"""
+    if not results:
+        return "No results returned from the query."
+
+    result_text = "BigQuery Results:\n"
+    result_text += "=" * 40 + "\n\n"
+
+    # Get column names and create header
+    first_row = None
+    row_count = 0
+    rows_data = []
+
+    for row in results:
+        if first_row is None:
+            first_row = row
+            headers = list(row.keys())
+            result_text += "Columns: " + ", ".join(headers) + "\n\n"
+
+        # Store row data
+        row_data = {}
+        for key in row.keys():
+            row_data[key] = str(row[key])
+        rows_data.append(row_data)
+        row_count += 1
+
+        # Limit to first 100 rows for AI processing
+        if row_count >= 100:
+            break
+
+    # Add row data
+    result_text += f"Data ({row_count} rows):\n"
+    for i, row_data in enumerate(rows_data):
+        result_text += (
+            f"Row {i+1}: " + ", ".join([f"{k}={v}" for k, v in row_data.items()]) + "\n"
+        )
+
+    if results.total_rows > row_count:
+        result_text += f"\n... (showing first {row_count} rows of {results.total_rows} total rows)\n"
+
+    return result_text
+
+
+def generate_final_response_with_ai(
+    client, user_prompt, bigquery_results_text, sql_query
+):
+    """Generate a polished final response based on user prompt and BigQuery results"""
+    system_prompt = """You are a data analyst expert. You will be given:
+1. A user's original question
+2. The SQL query that was generated 
+3. The results from BigQuery
+
+Your task is to provide a comprehensive, polished analysis that:
+1. Directly answers the user's question
+2. Provides insights and context about the data
+3. Highlights key findings and patterns
+4. Uses clear, non-technical language when possible
+5. Formats the response in a readable way with headers, bullet points, etc.
+6. Includes relevant statistics and summaries
+7. Suggests follow-up questions or additional analysis if appropriate
+
+Make your response engaging and informative, as if you're presenting findings to a business stakeholder."""
+
+    prompt = f"""User's Original Question: {user_prompt}
+
+SQL Query Used:
+```sql
+{sql_query}
+```
+
+{bigquery_results_text}
+
+Please provide a comprehensive analysis and answer to the user's question based on these results."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1500,
+            temperature=0.3,
+            stream=True,
+        )
+
+        # Handle streaming response
+        full_response = ""
+        print("\n" + "=" * 80)
+        print("AI ANALYSIS & INSIGHTS")
+        print("=" * 80)
+
+        for chunk in response:
+            if chunk.choices[0].delta.content is not None:
+                content = chunk.choices[0].delta.content
+                print(content, end="", flush=True)
+                full_response += content
+
+        print("\n" + "=" * 80)
+        return full_response
+
+    except Exception as e:
+        print(f"Error generating final response with OpenAI: {e}")
+        return None
+
+
 def print_results(results):
     """Print BigQuery results in a formatted way"""
     if not results:
@@ -201,8 +307,8 @@ def main():
     # Load environment variables
     load_dotenv()
 
-    print("BigQuery + OpenAI SQL Generator")
-    print("=" * 40)
+    print("BigQuery + OpenAI SQL Generator & Analyzer")
+    print("=" * 50)
 
     # Get user prompt
     user_prompt = input("\nEnter your question about the database: ").strip()
@@ -248,8 +354,18 @@ def main():
     if results is None:
         return
 
-    # Print results
-    print_results(results)
+    # Convert results to text format for AI processing
+    print("Processing results with AI for final analysis...")
+    results_text = convert_results_to_text(results)
+
+    # Generate final polished response with AI
+    final_response = generate_final_response_with_ai(
+        openai_client, user_prompt, results_text, sql_query
+    )
+
+    if not final_response:
+        print("Failed to generate AI analysis. Showing raw results instead:")
+        print_results(results)
 
 
 if __name__ == "__main__":
