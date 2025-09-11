@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated assets
+pytorch_cheatsheet.pdf
+pytorch_cheatsheet.png
+pytorch_cheatsheet.svg
+
+# Virtual environments
+.venv/
+venv/
+.env/
+
