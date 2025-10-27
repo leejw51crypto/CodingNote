@@ -6,8 +6,8 @@ Implements a Calculator service that performs basic arithmetic operations.
 
 import asyncio
 
-import calculator_capnp
 import capnp  # Must import capnp first
+import calculator_capnp
 
 
 class CalculatorImpl(calculator_capnp.Calculator.Server):

@@ -9,8 +9,8 @@ import signal
 import sys
 import time
 
-import calculator_capnp
 import capnp  # Must import capnp first
+import calculator_capnp
 
 
 class RPCTestOrchestrator:

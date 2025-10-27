@@ -6,8 +6,8 @@ Connects to the Calculator service and performs various operations.
 
 import asyncio
 
-import calculator_capnp
 import capnp  # Must import capnp first
+import calculator_capnp
 
 
 async def main():
