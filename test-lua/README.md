@@ -7,14 +7,17 @@ A hierarchical deterministic (HD) wallet manager with Lua scripting support, bui
 - **HD Wallet Support**: BIP32/BIP39/BIP44 compliant wallet generation
 - **Multi-Chain Compatible**: Ethereum-style address generation
 - **Cronos EVM Integration**: Native token and ERC20 token support
-- **AI-Powered Scripting**: Generate and execute Lua code using OpenAI
+- **AI-Powered Scripting**: Generate and execute Lua code using OpenAI or Ollama (local)
+- **Session Management**: Login/logout functionality with persistent wallet sessions
 - **Secure Key Management**: Hidden input for sensitive data
 - **Interactive CLI**: Menu-driven interface for all wallet operations
 
 ## Prerequisites
 
 - Rust 1.70+ and Cargo
-- OpenAI API key (optional, only needed for AI features)
+- **For AI features (optional)**:
+  - OpenAI API key, OR
+  - [Ollama](https://ollama.ai/) installed locally with `gpt-oss:20b` model
 
 ## Installation
 
@@ -54,38 +57,60 @@ The wallet creates an `info.json` file with default configuration:
 
 ### AI Features Setup
 
-To use AI code generation (menu option 8):
+**Option 1: Ollama (Local AI - Recommended)**
+
+1. Install Ollama: https://ollama.ai/
+2. Pull the model:
+```bash
+ollama pull gpt-oss:20b
+```
+3. No API key needed - runs locally!
+4. Use menu option `9` for Ollama AI mode
+
+**Option 2: OpenAI (Cloud AI)**
 
 ```bash
 export OPENAI_API_KEY="your-api-key-here"
 ```
 
 Or create a `.env` file (make sure it's in `.gitignore`).
+Use menu option `91` for OpenAI AI mode.
 
 ## Usage
 
 ### Quick Start
 
+**First Time Login:**
+
 1. **Generate a new wallet**:
    - Select option `1` to generate a mnemonic
    - Save the 24-word phrase securely
    - Create wallet at index 0
+   - **Wallet session is automatically saved** to `wallet_session.json`
 
 2. **Import existing wallet**:
    - Select option `2`
    - Enter your mnemonic phrase (input is hidden)
    - Specify wallet index (default: 0)
+   - **Wallet session is automatically saved**
+
+**Next Time:**
+- Your wallet session persists - just run `cargo run` and you'll be logged in automatically
+- Use option `19` to logout and clear the session
+
+**Using Your Wallet:**
 
 3. **Check balance**:
-   - Select option `9` for native token balance
-   - Select option `13` for ERC20 token balance
+   - Select option `10` for native token balance
+   - Select option `14` for ERC20 token balance
 
 4. **Send transactions**:
-   - Select option `10` for native tokens
-   - Select option `14` for ERC20 tokens
+   - Select option `11` for native tokens
+   - Select option `15` for ERC20 tokens
 
 ### Menu Options
 
+**When Logged In:**
 ```
 1.  Generate New Mnemonic
 2.  Create Wallet from Mnemonic
@@ -94,17 +119,27 @@ Or create a `.env` file (make sure it's in `.gitignore`).
 5.  Show Public Key
 6.  Show Addresses (Multiple)
 7.  Show Current Address
-8.  AI - Generate and Run Lua Code
-9.  Get Balance (Native Token)
-10. Send Transaction (Native Token)
-11. Get Transaction by Hash
-12. Get Latest Block Number
-13. Get ERC20 Token Balance
-14. Send ERC20 Token
-15. View/Update Config (RPC, Chain ID)
-16. Set Default Address
-17. Toggle AI Autorun
+8.  Show Addresses & Keys (Detailed view with private keys)
+9.  AI - Ollama (Local AI)
+10. Get Balance (Native Token)
+11. Send Transaction (Native Token)
+12. Get Transaction by Hash
+13. Get Latest Block Number
+14. Get ERC20 Token Balance
+15. Send ERC20 Token
+16. View/Update Config (RPC, Chain ID)
+17. Set Default Address
+18. Toggle AI Autorun
+19. Logout
+91. AI - OpenAI (Cloud AI)
 0.  Exit
+```
+
+**When Not Logged In:**
+```
+1. Create New Wallet
+2. Import Existing Wallet
+0. Exit
 ```
 
 ### BIP44 Derivation Path
@@ -124,7 +159,12 @@ You can use scientific notation: `1e18` for 1 token.
 
 ## AI Mode
 
-The AI mode (option 8) generates Lua code based on natural language requests:
+The wallet supports two AI providers:
+
+- **Option 9 - Ollama (Local)**: Runs AI models locally on your machine (default: `gpt-oss:20b`)
+- **Option 91 - OpenAI (Cloud)**: Uses OpenAI's GPT-4 API (requires API key)
+
+Both modes generate Lua code based on natural language requests:
 
 ### Examples:
 
@@ -161,10 +201,18 @@ AI> check the latest block number
 The `.gitignore` is configured to exclude:
 - `*.wallet` - Wallet data files
 - `*.keystore` - Keystore files
+- `wallet_session.json` - **Contains private keys and mnemonics in plaintext!**
 - `info.json` - Configuration with addresses
 - `.env` - Environment variables
 
 **Never commit these files to version control!**
+
+⚠️ **CRITICAL**: The `wallet_session.json` file stores your private keys unencrypted for convenience. This is acceptable ONLY for:
+- Educational/testing purposes
+- Testnet wallets with no real value
+- Local development environments
+
+**NEVER** use this wallet with real funds or on production systems!
 
 ### Best Practices
 
@@ -210,9 +258,21 @@ To add support for other EVM chains:
 ## Troubleshooting
 
 ### "OPENAI_API_KEY environment variable not set"
-Set your OpenAI API key:
+If using OpenAI (option 91), set your API key:
 ```bash
 export OPENAI_API_KEY="sk-..."
+```
+
+Alternatively, use Ollama (option 9) which doesn't require an API key.
+
+### "Failed to call Ollama API: Connection refused"
+Ensure Ollama is running:
+```bash
+# Start Ollama service
+ollama serve
+
+# In another terminal, verify it's running
+ollama list
 ```
 
 ### "Failed to create provider"

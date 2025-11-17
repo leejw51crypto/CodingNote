@@ -8,15 +8,151 @@ current_mnemonic_handle = nil
 -- AI autorun setting (set to false to prompt before each execution)
 ai_autorun = true
 
+-- AI provider setting (ollama or openai)
+ai_provider = "ollama" -- Default to Ollama
+
+-- Login state
+is_logged_in = false
+WALLET_SESSION_FILE = "wallet_session.json"
+
+-- Simple JSON encoder/decoder for wallet info
+local function encode_json(data)
+	local result = "{\n"
+	local first = true
+	for key, value in pairs(data) do
+		if not first then
+			result = result .. ",\n"
+		end
+		first = false
+		result = result .. '  "' .. key .. '": "' .. value .. '"'
+	end
+	result = result .. "\n}"
+	return result
+end
+
+local function decode_json(json_str)
+	local data = {}
+	-- Simple JSON parser for our specific use case
+	for key, value in json_str:gmatch('"([^"]+)"%s*:%s*"([^"]+)"') do
+		data[key] = value
+	end
+	return data
+end
+
+-- File I/O functions for login/logout
+local function save_wallet_to_file()
+	if not current_wallet then
+		return false, "No wallet loaded"
+	end
+
+	local data = {
+		private_key = current_wallet.private_key,
+		address = current_wallet.address,
+		wallet_index = tostring(current_wallet.wallet_index or 0),
+	}
+
+	-- Save mnemonic if available
+	if current_mnemonic_handle then
+		data.mnemonic = current_mnemonic_handle:get_mnemonic()
+	end
+
+	local json_content = encode_json(data)
+	local file, err = io.open(WALLET_SESSION_FILE, "w")
+	if not file then
+		return false, "Failed to open file: " .. tostring(err)
+	end
+
+	file:write(json_content)
+	file:close()
+	return true
+end
+
+local function load_wallet_from_file()
+	local file, err = io.open(WALLET_SESSION_FILE, "r")
+	if not file then
+		return nil, "Failed to open file: " .. tostring(err)
+	end
+
+	local content = file:read("*all")
+	file:close()
+
+	if not content or content == "" then
+		return nil, "Empty file"
+	end
+
+	local data = decode_json(content)
+	return data
+end
+
+local function delete_wallet_file()
+	local success, err = os.remove(WALLET_SESSION_FILE)
+	if not success then
+		return false, "Failed to delete file: " .. tostring(err)
+	end
+	return true
+end
+
+local function check_login_status()
+	local file = io.open(WALLET_SESSION_FILE, "r")
+	if file then
+		file:close()
+		return true
+	end
+	return false
+end
+
+local function login_wallet(wallet_data)
+	-- Reconstruct wallet table from saved data
+	current_wallet = {
+		private_key = wallet_data.private_key,
+		address = wallet_data.address,
+		wallet_index = tonumber(wallet_data.wallet_index) or 0,
+	}
+
+	-- Restore mnemonic handle if available
+	if wallet_data.mnemonic then
+		local success, handle = pcall(function()
+			return wallet.import_mnemonic(wallet_data.mnemonic)
+		end)
+		if success then
+			current_mnemonic_handle = handle
+		end
+	end
+
+	is_logged_in = true
+end
+
+local function logout_wallet()
+	current_wallet = nil
+	current_mnemonic_handle = nil
+	is_logged_in = false
+	delete_wallet_file()
+end
+
 -- Function to print a separator line
 local function print_separator()
 	print("=" .. string.rep("=", 58))
 end
 
--- Function to print the menu
+-- Function to print the login menu (when not logged in)
+local function print_login_menu()
+	print_separator()
+	print("            ECDSA WALLET MANAGER - LOGIN")
+	print_separator()
+	print("1. Create New Wallet")
+	print("2. Import Existing Wallet")
+	print("0. Exit")
+	print_separator()
+	io.write("Enter your choice: ")
+	io.flush()
+end
+
+-- Function to print the main menu (when logged in)
 local function print_menu()
 	print_separator()
 	print("            ECDSA WALLET MANAGER")
+	print_separator()
+	print("Current Wallet: " .. (current_wallet and current_wallet.address or "None"))
 	print_separator()
 	print("1. Generate New Mnemonic")
 	print("2. Create Wallet from Mnemonic")
@@ -25,19 +161,23 @@ local function print_menu()
 	print("5. Show Public Key")
 	print("6. Show Addresses (Multiple)")
 	print("7. Show Current Address")
-	print("8. AI - Generate and Run Lua Code")
+	print("8. Show Addresses & Keys")
+	print("9. AI - Ollama")
 	print_separator()
 	print("            CRONOS EVM FUNCTIONS")
 	print_separator()
-	print("9. Get Balance (Native Token)")
-	print("10. Send Transaction (Native Token)")
-	print("11. Get Transaction by Hash")
-	print("12. Get Latest Block Number")
-	print("13. Get ERC20 Token Balance")
-	print("14. Send ERC20 Token")
-	print("15. View/Update Config (RPC, Chain ID)")
-	print("16. Set Default Address")
-	print("17. Toggle AI Autorun (" .. (ai_autorun and "ON" or "OFF") .. ")")
+	print("10. Get Balance (Native Token)")
+	print("11. Send Transaction (Native Token)")
+	print("12. Get Transaction by Hash")
+	print("13. Get Latest Block Number")
+	print("14. Get ERC20 Token Balance")
+	print("15. Send ERC20 Token")
+	print("16. View/Update Config (RPC, Chain ID)")
+	print("17. Set Default Address")
+	print("18. Toggle AI Autorun (" .. (ai_autorun and "ON" or "OFF") .. ")")
+	print("19. Logout")
+	print_separator()
+	print("91. AI - OpenAI")
 	print("0. Exit")
 	print_separator()
 	io.write("Enter your choice: ")
@@ -67,6 +207,15 @@ local function generate_new_mnemonic()
 
 		current_wallet = wallet.create_wallet(current_mnemonic_handle, index)
 		print("\n✓ Wallet created successfully at index " .. index .. "!")
+
+		-- Save wallet to info.json and login
+		local success, err = save_wallet_to_file()
+		if success then
+			is_logged_in = true
+			print("✓ Wallet saved and logged in!")
+		else
+			print("⚠️  Warning: Failed to save wallet - " .. tostring(err))
+		end
 	end
 end
 
@@ -100,6 +249,15 @@ local function create_wallet_from_mnemonic()
 		if success2 then
 			current_wallet = wallet_result
 			print("✓ Wallet created successfully at index " .. index .. "!")
+
+			-- Save wallet to info.json and login
+			local save_success, save_err = save_wallet_to_file()
+			if save_success then
+				is_logged_in = true
+				print("✓ Wallet saved and logged in!")
+			else
+				print("⚠️  Warning: Failed to save wallet - " .. tostring(save_err))
+			end
 		else
 			print("❌ Error creating wallet: " .. tostring(wallet_result))
 		end
@@ -209,8 +367,59 @@ local function show_address()
 	print()
 end
 
+-- Function to show multiple addresses with their keys
+local function show_addresses_and_keys()
+	if not current_wallet or not current_mnemonic_handle then
+		print("\n❌ No wallet loaded.")
+		return
+	end
+
+	io.write("How many addresses to display? (default 5): ")
+	io.flush()
+	local count_str = io.read()
+	local count = tonumber(count_str) or 5
+
+	print("\n>> Generating " .. count .. " addresses with keys...")
+	print_separator()
+	print("Derivation Path: m/44'/60'/0'/0/{index}")
+	print_separator()
+
+	for i = 0, count - 1 do
+		local success, wallet_data = pcall(function()
+			return wallet.create_wallet(current_mnemonic_handle, i)
+		end)
+
+		if success and wallet_data then
+			print()
+			print(string.format("━━━ Wallet Index: %d ━━━", i))
+			print()
+			print("Address:")
+			print(wallet_data.address)
+			print()
+			print("Private Key:")
+			print(wallet_data.private_key)
+			print()
+			print("Public Key:")
+			print(wallet_data.public_key)
+			print()
+		else
+			print(string.format("\n❌ Error generating wallet at index %d: %s", i, tostring(wallet_data)))
+		end
+	end
+
+	print_separator()
+end
+
 -- Function to handle AI code generation and execution
-local function ai_mode()
+local function ai_mode(provider_override)
+	local current_provider = provider_override or ai_provider
+	local model_name = "unknown"
+	if current_provider == "ollama" then
+		model_name = "gpt-oss:20b (local)"
+	elseif current_provider == "openai" then
+		model_name = "gpt-4"
+	end
+
 	print("\n>> AI Code Generation Mode")
 	print("-------------------")
 	print("Enter your requests and the AI will generate and execute Lua code.")
@@ -218,6 +427,8 @@ local function ai_mode()
 	print("Type 'toggle' to toggle autorun mode.")
 	print()
 	print("Settings:")
+	print("      - AI Provider: " .. current_provider:upper())
+	print("      - Model: " .. model_name)
 	print("      - Autorun: " .. (ai_autorun and "ENABLED (auto-execute)" or "DISABLED (prompt before execute)"))
 	print()
 	print("Note: Variables from executed code persist across iterations.")
@@ -261,11 +472,11 @@ local function ai_mode()
 
 		-- Only show "Generating" message when autorun is disabled
 		if not ai_autorun then
-			print("\n>> Generating Lua code...")
+			print("\n>> Generating Lua code using " .. current_provider:upper() .. "...")
 		end
 
 		local success, code = pcall(function()
-			return wallet.generate_lua_code(request)
+			return wallet.generate_lua_code_with_provider(request, current_provider)
 		end)
 
 		if not success then
@@ -867,6 +1078,27 @@ local function toggle_ai_autorun_menu()
 	end
 end
 
+-- Function to handle logout
+local function logout_menu()
+	print("\n>> Logout")
+	print("-------------------")
+	print("\nAre you sure you want to logout?")
+	print("This will clear your current session and delete wallet_session.json.")
+	print()
+
+	io.write("Logout? (y/n): ")
+	io.flush()
+	local confirm = io.read()
+
+	if confirm and (confirm:lower() == "y" or confirm:lower() == "yes") then
+		logout_wallet()
+		print("\n✓ Logged out successfully!")
+		print("Session cleared and wallet_session.json removed.")
+	else
+		print("\nLogout cancelled.")
+	end
+end
+
 -- Function to pause and wait for user input
 local function pause()
 	io.write("\nPress Enter to continue...")
@@ -892,68 +1124,114 @@ local function main()
 	print("This wallet uses Lua scripting with Rust crypto backend")
 	print("HD Wallet Support: BIP32/BIP44 Derivation Path\n")
 
-	while running do
-		print_menu()
-		local choice = io.read()
-
-		if choice == "1" then
-			generate_new_mnemonic()
-			pause()
-		elseif choice == "2" then
-			create_wallet_from_mnemonic()
-			pause()
-		elseif choice == "3" then
-			show_wallet_info()
-			pause()
-		elseif choice == "4" then
-			show_private_key()
-			pause()
-		elseif choice == "5" then
-			show_public_key()
-			pause()
-		elseif choice == "6" then
-			show_multiple_addresses()
-			pause()
-		elseif choice == "7" then
-			show_address()
-			pause()
-		elseif choice == "8" then
-			ai_mode()
-			pause()
-		elseif choice == "9" then
-			cronos_get_balance_menu()
-			pause()
-		elseif choice == "10" then
-			cronos_send_tx_menu()
-			pause()
-		elseif choice == "11" then
-			cronos_get_tx_menu()
-			pause()
-		elseif choice == "12" then
-			cronos_get_latest_block_menu()
-			pause()
-		elseif choice == "13" then
-			cronos_get_erc20_balance_menu()
-			pause()
-		elseif choice == "14" then
-			cronos_send_erc20_menu()
-			pause()
-		elseif choice == "15" then
-			cronos_config_menu()
-			pause()
-		elseif choice == "16" then
-			set_default_address_menu()
-			pause()
-		elseif choice == "17" then
-			toggle_ai_autorun_menu()
-			pause()
-		elseif choice == "0" then
-			print("\n👋 Thank you for using ECDSA Wallet Manager!")
-			print("🔐 Remember to keep your keys safe!\n")
-			running = false
+	-- Check if user is already logged in
+	if check_login_status() then
+		print(">> Found existing session (wallet_session.json)")
+		local wallet_data, load_err = load_wallet_from_file()
+		if wallet_data then
+			login_wallet(wallet_data)
+			print("✓ Wallet loaded from wallet_session.json")
+			print("Address: " .. current_wallet.address)
+			print()
 		else
-			print("\n❌ Invalid choice. Please try again.")
-			pause()
+			print("⚠️  Warning: Failed to load wallet - " .. tostring(load_err))
+			print("Please login again.\n")
+		end
+	end
+
+	while running do
+		-- Show appropriate menu based on login status
+		if is_logged_in then
+			print_menu()
+			local choice = io.read()
+
+			if choice == "1" then
+				generate_new_mnemonic()
+				pause()
+			elseif choice == "2" then
+				create_wallet_from_mnemonic()
+				pause()
+			elseif choice == "3" then
+				show_wallet_info()
+				pause()
+			elseif choice == "4" then
+				show_private_key()
+				pause()
+			elseif choice == "5" then
+				show_public_key()
+				pause()
+			elseif choice == "6" then
+				show_multiple_addresses()
+				pause()
+			elseif choice == "7" then
+				show_address()
+				pause()
+			elseif choice == "8" then
+				show_addresses_and_keys()
+				pause()
+			elseif choice == "9" then
+				ai_mode("ollama")
+				pause()
+			elseif choice == "10" then
+				cronos_get_balance_menu()
+				pause()
+			elseif choice == "11" then
+				cronos_send_tx_menu()
+				pause()
+			elseif choice == "12" then
+				cronos_get_tx_menu()
+				pause()
+			elseif choice == "13" then
+				cronos_get_latest_block_menu()
+				pause()
+			elseif choice == "14" then
+				cronos_get_erc20_balance_menu()
+				pause()
+			elseif choice == "15" then
+				cronos_send_erc20_menu()
+				pause()
+			elseif choice == "16" then
+				cronos_config_menu()
+				pause()
+			elseif choice == "17" then
+				set_default_address_menu()
+				pause()
+			elseif choice == "18" then
+				toggle_ai_autorun_menu()
+				pause()
+			elseif choice == "19" then
+				logout_menu()
+				pause()
+			elseif choice == "91" then
+				ai_mode("openai")
+				pause()
+			elseif choice == "0" then
+				print("\n👋 Thank you for using ECDSA Wallet Manager!")
+				print("🔐 Remember to keep your keys safe!\n")
+				running = false
+			else
+				print("\n❌ Invalid choice. Please try again.")
+				pause()
+			end
+		else
+			-- Show login menu
+			print_login_menu()
+			local choice = io.read()
+
+			if choice == "1" then
+				generate_new_mnemonic()
+				pause()
+			elseif choice == "2" then
+				create_wallet_from_mnemonic()
+				pause()
+			elseif choice == "0" then
+				print("\n👋 Thank you for using ECDSA Wallet Manager!")
+				print("🔐 Remember to keep your keys safe!\n")
+				running = false
+			else
+				print("\n❌ Invalid choice. Please try again.")
+				pause()
+			end
 		end
 
 		-- Clear screen (works on Unix-like systems)

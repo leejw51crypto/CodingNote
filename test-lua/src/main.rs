@@ -249,7 +249,7 @@ struct OpenAIResponse {
 }
 
 /// Call OpenAI API to generate Lua code based on user request
-fn generate_lua_code(_lua: &Lua, user_request: String) -> LuaResult<String> {
+fn generate_lua_code_openai(_lua: &Lua, user_request: String) -> LuaResult<String> {
     // Get API key from environment
     let api_key = env::var("OPENAI_API_KEY").map_err(|_| {
         LuaError::RuntimeError("OPENAI_API_KEY environment variable not set".to_string())
@@ -332,6 +332,117 @@ fn generate_lua_code(_lua: &Lua, user_request: String) -> LuaResult<String> {
     };
 
     Ok(cleaned_code)
+}
+
+/// Call Ollama API to generate Lua code based on user request
+fn generate_lua_code_ollama(_lua: &Lua, user_request: String) -> LuaResult<String> {
+    // Ollama runs locally, default at http://localhost:11434
+    let ollama_url =
+        env::var("OLLAMA_API_URL").unwrap_or_else(|_| "http://localhost:11434".to_string());
+
+    // Default model: gpt-oss:20b
+    let model = env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+
+    // Read PROTOCOL.md
+    let protocol_content = std::fs::read_to_string("PROTOCOL.md")
+        .unwrap_or_else(|_| "Protocol documentation not available".to_string());
+
+    // Construct system message with protocol information
+    let system_message = format!(
+        "You are a Lua code generator for a wallet system. Generate ONLY executable Lua code without any markdown formatting, explanations, or comments outside the code. Do not wrap the code in ```lua blocks. Just return pure Lua code that can be executed directly.\n\nIMPORTANT API NOTES:\n- The 'wallet' module is ALREADY AVAILABLE as a global variable. DO NOT use require(\"wallet\").\n\nWALLET FUNCTIONS:\n- wallet.generate_mnemonic() returns a WalletHandle object (NOT a string)\n- To get the actual mnemonic string, call :get_mnemonic() on the handle: handle:get_mnemonic()\n- wallet.create_wallet(handle, index) takes a WalletHandle as first parameter\n- wallet.generate_addresses(handle, count) takes a WalletHandle as first parameter\n- wallet.import_mnemonic(string) creates a WalletHandle from a mnemonic string\n\nCRONOS EVM FUNCTIONS:\n- wallet.cronos_get_balance(address) - Get native token balance\n- wallet.cronos_send_tx({{private_key=..., to=..., amount=...}}) - Send native tokens (amount in wei)\n- wallet.cronos_get_tx(tx_hash) - Get transaction details\n- wallet.cronos_get_latest_block() - Get latest block number\n- wallet.cronos_get_erc20_balance({{token_address=..., address=...}}) - Get ERC20 token balance\n- wallet.cronos_send_erc20({{private_key=..., token_address=..., to=..., amount=...}}) - Send ERC20 tokens\n- wallet.get_config() - Get current RPC and chain configuration\n- wallet.set_config(table) - Update RPC and chain configuration\n\nIMPORTANT: Amount must be in WEI (not ETH). To convert: 1 ETH = 1e18 wei, 0.1 ETH = 1e17 wei\n- Use print() to display output to the user.\n- Variables you create will persist across iterations, so users can build on previous code.\n- There's a global 'current_wallet' variable that may contain a previously created wallet (access with current_wallet.address, current_wallet.private_key, etc.)\n- There's a global 'current_mnemonic_handle' variable that may contain a previously created handle (use it with wallet.create_wallet() or wallet.generate_addresses())\n- IMPORTANT: Always check if current_wallet or current_mnemonic_handle exist before using them (use: if current_wallet then ... end)\n- Keep the code simple and focused on the user's request.\n- Always use print() to show results to the user.\n\nHere is the protocol documentation (NOTE: The protocol docs are outdated - they show old API with strings. Use the API notes above instead!):\n\n{}",
+        protocol_content
+    );
+
+    let user_message = format!(
+        "Generate Lua code for the following request: {}\n\nIMPORTANT REMINDERS:\n- DO NOT use require(\"wallet\") - the wallet module is already available globally\n- wallet.generate_mnemonic() returns a WalletHandle object - use :get_mnemonic() to get the string\n- wallet.create_wallet() and wallet.generate_addresses() take a WalletHandle, not a string\n- Use print() statements to show results\n- Return ONLY the Lua code, no markdown, no explanations, no code blocks.",
+        user_request
+    );
+
+    // Create Ollama request (compatible with OpenAI format)
+    let request = OpenAIRequest {
+        model: model.clone(),
+        messages: vec![
+            OpenAIMessage {
+                role: "system".to_string(),
+                content: system_message,
+            },
+            OpenAIMessage {
+                role: "user".to_string(),
+                content: user_message,
+            },
+        ],
+        temperature: 0.7,
+    };
+
+    // Make blocking HTTP request to Ollama
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .post(format!("{}/v1/chat/completions", ollama_url))
+        .header("Content-Type", "application/json")
+        .json(&request)
+        .send()
+        .map_err(|e| {
+            LuaError::RuntimeError(format!(
+                "Failed to call Ollama API: {}. Is Ollama running?",
+                e
+            ))
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response
+            .text()
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(LuaError::RuntimeError(format!(
+            "Ollama API error ({}): {}",
+            status, error_text
+        )));
+    }
+
+    // Parse response
+    let ollama_response: OpenAIResponse = response
+        .json()
+        .map_err(|e| LuaError::RuntimeError(format!("Failed to parse Ollama response: {}", e)))?;
+
+    // Extract generated code
+    let code = ollama_response
+        .choices
+        .first()
+        .map(|choice| choice.message.content.trim().to_string())
+        .ok_or_else(|| LuaError::RuntimeError("No response from Ollama".to_string()))?;
+
+    // Clean up code if it has markdown formatting
+    let cleaned_code = if code.starts_with("```") {
+        // Remove markdown code blocks
+        code.lines()
+            .skip(1) // Skip first ```lua line
+            .take_while(|line| !line.starts_with("```"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        code
+    };
+
+    Ok(cleaned_code)
+}
+
+/// Call AI API to generate Lua code based on user request
+/// Supports both OpenAI and Ollama
+fn generate_lua_code_with_provider(_lua: &Lua, params: (String, String)) -> LuaResult<String> {
+    let (user_request, provider) = params;
+    let provider = provider.to_lowercase();
+
+    if provider == "openai" {
+        generate_lua_code_openai(_lua, user_request)
+    } else {
+        // Default to Ollama
+        generate_lua_code_ollama(_lua, user_request)
+    }
+}
+
+/// Legacy function for backward compatibility - defaults to Ollama
+fn generate_lua_code(_lua: &Lua, user_request: String) -> LuaResult<String> {
+    generate_lua_code_ollama(_lua, user_request)
 }
 
 /// Read hidden input from user (like password or mnemonic)
@@ -772,6 +883,10 @@ fn main() -> LuaResult<()> {
         lua.create_function(generate_btc_address)?,
     )?;
     wallet_module.set("generate_lua_code", lua.create_function(generate_lua_code)?)?;
+    wallet_module.set(
+        "generate_lua_code_with_provider",
+        lua.create_function(generate_lua_code_with_provider)?,
+    )?;
     wallet_module.set("read_hidden", lua.create_function(read_hidden)?)?;
     wallet_module.set("display_image", lua.create_function(display_image)?)?;
 

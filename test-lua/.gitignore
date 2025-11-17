@@ -32,3 +32,9 @@ lua-ecdsa-wallet
 info.json
 *.wallet
 *.keystore
+*.md
+*.json
+
+test*.lua
+example*.lua
+ai_example.lua
