@@ -880,10 +880,12 @@ local function main()
 
 	-- Display wallet image if available
 	local success, err = pcall(function()
-		wallet.display_image("wallet.png")
+		wallet.display_image("wallet.jpg")
 	end)
 	if not success then
-		-- Silently ignore if image display fails (image might not exist or terminal doesn't support images)
+		-- Show error for debugging (terminal might not support images)
+		print("⚠️  Note: Could not display image - " .. tostring(err))
+		print("   (Your terminal may not support image display)\n")
 	end
 
 	print("\n🔐 Welcome to ECDSA Wallet Manager")

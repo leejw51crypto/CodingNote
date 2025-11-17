@@ -352,7 +352,10 @@ fn read_hidden(_lua: &Lua, prompt: String) -> LuaResult<String> {
 }
 
 /// Display an image using viuer
-fn display_image(_lua: &Lua, image_path: String) -> LuaResult<()> {
+fn display_image(
+    _lua: &Lua,
+    (image_path, width, height): (String, Option<u32>, Option<u32>),
+) -> LuaResult<()> {
     // Check if file exists
     if !Path::new(&image_path).exists() {
         return Err(LuaError::RuntimeError(format!(
@@ -361,9 +364,15 @@ fn display_image(_lua: &Lua, image_path: String) -> LuaResult<()> {
         )));
     }
 
-    // Configure viuer
+    // Use provided dimensions or defaults (in characters, not pixels)
+    let width = width.unwrap_or(20); // default 20 characters
+    let height = height.unwrap_or(10); // default 10 characters
+
+    // Configure viuer with max dimensions (columns x rows)
     let config = viuer::Config {
         absolute_offset: false,
+        width: Some(width),
+        height: Some(height),
         ..Default::default()
     };
 
