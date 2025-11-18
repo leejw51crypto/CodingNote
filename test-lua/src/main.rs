@@ -426,16 +426,126 @@ fn generate_lua_code_ollama(_lua: &Lua, user_request: String) -> LuaResult<Strin
     Ok(cleaned_code)
 }
 
+/// Ollama native API request structure
+#[derive(Serialize)]
+struct OllamaChatRequest {
+    model: String,
+    messages: Vec<OpenAIMessage>,
+    stream: bool,
+}
+
+/// Ollama native API response structure
+#[derive(Deserialize)]
+struct OllamaChatResponse {
+    message: OllamaChatMessage,
+}
+
+#[derive(Deserialize)]
+struct OllamaChatMessage {
+    content: String,
+}
+
+/// Call Ollama Cloud API to generate Lua code based on user request
+fn generate_lua_code_ollama_cloud(_lua: &Lua, user_request: String) -> LuaResult<String> {
+    // Ollama Cloud endpoint
+    let ollama_cloud_url = "https://ollama.com/api/chat";
+
+    // Get API key from environment
+    let api_key = env::var("OLLAMA_API_KEY").map_err(|_| {
+        LuaError::RuntimeError("OLLAMA_API_KEY environment variable not set. Get your API key from https://ollama.com/settings/keys".to_string())
+    })?;
+
+    // Load model from config
+    let config = load_config();
+    let model = config.ollama_cloud_model;
+
+    // Read PROTOCOL.md
+    let protocol_content = std::fs::read_to_string("PROTOCOL.md")
+        .unwrap_or_else(|_| "Protocol documentation not available".to_string());
+
+    // Construct system message with protocol information
+    let system_message = format!(
+        "You are a Lua code generator for a wallet system. Generate ONLY executable Lua code without any markdown formatting, explanations, or comments outside the code. Do not wrap the code in ```lua blocks. Just return pure Lua code that can be executed directly.\n\nIMPORTANT API NOTES:\n- The 'wallet' module is ALREADY AVAILABLE as a global variable. DO NOT use require(\"wallet\").\n\nWALLET FUNCTIONS:\n- wallet.generate_mnemonic() returns a WalletHandle object (NOT a string)\n- To get the actual mnemonic string, call :get_mnemonic() on the handle: handle:get_mnemonic()\n- wallet.create_wallet(handle, index) takes a WalletHandle as first parameter\n- wallet.generate_addresses(handle, count) takes a WalletHandle as first parameter\n- wallet.import_mnemonic(string) creates a WalletHandle from a mnemonic string\n\nCRONOS EVM FUNCTIONS:\n- wallet.cronos_get_balance(address) - Get native token balance\n- wallet.cronos_send_tx({{private_key=..., to=..., amount=...}}) - Send native tokens (amount in wei)\n- wallet.cronos_get_tx(tx_hash) - Get transaction details\n- wallet.cronos_get_latest_block() - Get latest block number\n- wallet.cronos_get_erc20_balance({{token_address=..., address=...}}) - Get ERC20 token balance\n- wallet.cronos_send_erc20({{private_key=..., token_address=..., to=..., amount=...}}) - Send ERC20 tokens\n- wallet.get_config() - Get current RPC and chain configuration\n- wallet.set_config(table) - Update RPC and chain configuration\n\nIMPORTANT: Amount must be in WEI (not ETH). To convert: 1 ETH = 1e18 wei, 0.1 ETH = 1e17 wei\n- Use print() to display output to the user.\n- Variables you create will persist across iterations, so users can build on previous code.\n- There's a global 'current_wallet' variable that may contain a previously created wallet (access with current_wallet.address, current_wallet.private_key, etc.)\n- There's a global 'current_mnemonic_handle' variable that may contain a previously created handle (use it with wallet.create_wallet() or wallet.generate_addresses())\n- IMPORTANT: Always check if current_wallet or current_mnemonic_handle exist before using them (use: if current_wallet then ... end)\n- Keep the code simple and focused on the user's request.\n- Always use print() to show results to the user.\n\nHere is the protocol documentation (NOTE: The protocol docs are outdated - they show old API with strings. Use the API notes above instead!):\n\n{}",
+        protocol_content
+    );
+
+    let user_message = format!(
+        "Generate Lua code for the following request: {}\n\nIMPORTANT REMINDERS:\n- DO NOT use require(\"wallet\") - the wallet module is already available globally\n- wallet.generate_mnemonic() returns a WalletHandle object - use :get_mnemonic() to get the string\n- wallet.create_wallet() and wallet.generate_addresses() take a WalletHandle, not a string\n- Use print() statements to show results\n- Return ONLY the Lua code, no markdown, no explanations, no code blocks.",
+        user_request
+    );
+
+    // Create Ollama native API request
+    let request = OllamaChatRequest {
+        model: model.clone(),
+        messages: vec![
+            OpenAIMessage {
+                role: "system".to_string(),
+                content: system_message,
+            },
+            OpenAIMessage {
+                role: "user".to_string(),
+                content: user_message,
+            },
+        ],
+        stream: false,
+    };
+
+    // Make blocking HTTP request to Ollama Cloud
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .post(ollama_cloud_url)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&request)
+        .send()
+        .map_err(|e| LuaError::RuntimeError(format!("Failed to call Ollama Cloud API: {}", e)))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response
+            .text()
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(LuaError::RuntimeError(format!(
+            "Ollama Cloud API error ({}): {}",
+            status, error_text
+        )));
+    }
+
+    // Parse response (Ollama native format)
+    let ollama_response: OllamaChatResponse = response.json().map_err(|e| {
+        LuaError::RuntimeError(format!("Failed to parse Ollama Cloud response: {}", e))
+    })?;
+
+    // Extract generated code
+    let code = ollama_response.message.content.trim().to_string();
+
+    // Clean up code if it has markdown formatting
+    let cleaned_code = if code.starts_with("```") {
+        // Remove markdown code blocks
+        code.lines()
+            .skip(1) // Skip first ```lua line
+            .take_while(|line| !line.starts_with("```"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        code
+    };
+
+    Ok(cleaned_code)
+}
+
 /// Call AI API to generate Lua code based on user request
-/// Supports both OpenAI and Ollama
+/// Supports OpenAI, Ollama Local, and Ollama Cloud
 fn generate_lua_code_with_provider(_lua: &Lua, params: (String, String)) -> LuaResult<String> {
     let (user_request, provider) = params;
     let provider = provider.to_lowercase();
 
     if provider == "openai" {
         generate_lua_code_openai(_lua, user_request)
+    } else if provider == "ollama_cloud" {
+        generate_lua_code_ollama_cloud(_lua, user_request)
     } else {
-        // Default to Ollama
+        // Default to Ollama Local
         generate_lua_code_ollama(_lua, user_request)
     }
 }
@@ -443,6 +553,89 @@ fn generate_lua_code_with_provider(_lua: &Lua, params: (String, String)) -> LuaR
 /// Legacy function for backward compatibility - defaults to Ollama
 fn generate_lua_code(_lua: &Lua, user_request: String) -> LuaResult<String> {
     generate_lua_code_ollama(_lua, user_request)
+}
+
+/// Get AI model configuration
+fn get_ai_config(_lua: &Lua, _: ()) -> LuaResult<LuaTable> {
+    let config = load_config();
+    let table = _lua.create_table()?;
+    table.set("ollama_cloud_model", config.ollama_cloud_model)?;
+    table.set("ollama_local_model", config.ollama_local_model)?;
+    Ok(table)
+}
+
+/// Set AI model configuration
+fn set_ai_model(_lua: &Lua, params: (String, String)) -> LuaResult<()> {
+    let (provider, model) = params;
+    let mut config = load_config();
+
+    match provider.to_lowercase().as_str() {
+        "ollama_cloud" => config.ollama_cloud_model = model,
+        "ollama_local" | "ollama" => config.ollama_local_model = model,
+        _ => {
+            return Err(LuaError::RuntimeError(format!(
+                "Unknown provider: {}",
+                provider
+            )))
+        }
+    }
+
+    save_config(&config)
+        .map_err(|e| LuaError::RuntimeError(format!("Failed to save config: {}", e)))?;
+    Ok(())
+}
+
+/// Response structure for Ollama tags API
+#[derive(Deserialize)]
+struct OllamaTagsResponse {
+    models: Vec<OllamaModelInfo>,
+}
+
+#[derive(Deserialize)]
+struct OllamaModelInfo {
+    name: String,
+    #[serde(default)]
+    size: u64,
+}
+
+/// List available Ollama Cloud models by fetching from API
+fn list_ollama_cloud_models(_lua: &Lua, _: ()) -> LuaResult<LuaTable> {
+    let table = _lua.create_table()?;
+
+    // Fetch models from Ollama API
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .get("https://ollama.com/api/tags")
+        .send()
+        .map_err(|e| LuaError::RuntimeError(format!("Failed to fetch Ollama models: {}", e)))?;
+
+    if !response.status().is_success() {
+        return Err(LuaError::RuntimeError(format!(
+            "Failed to fetch models: HTTP {}",
+            response.status()
+        )));
+    }
+
+    let tags_response: OllamaTagsResponse = response
+        .json()
+        .map_err(|e| LuaError::RuntimeError(format!("Failed to parse models response: {}", e)))?;
+
+    for (i, model_info) in tags_response.models.iter().enumerate() {
+        let entry = _lua.create_table()?;
+        entry.set("model", model_info.name.clone())?;
+
+        // Format size in GB
+        let size_gb = model_info.size as f64 / 1_000_000_000.0;
+        let description = if size_gb > 0.0 {
+            format!("{:.1} GB", size_gb)
+        } else {
+            "".to_string()
+        };
+        entry.set("description", description)?;
+        table.set(i + 1, entry)?;
+    }
+
+    Ok(table)
 }
 
 /// Read hidden input from user (like password or mnemonic)
@@ -505,6 +698,10 @@ struct WalletConfig {
     default_address: Option<String>,
     #[serde(default)]
     token_addresses: std::collections::HashMap<String, String>,
+    #[serde(default = "default_ollama_cloud_model")]
+    ollama_cloud_model: String,
+    #[serde(default = "default_ollama_local_model")]
+    ollama_local_model: String,
 }
 
 fn default_chain_id() -> u64 {
@@ -515,6 +712,14 @@ fn default_rpc_url() -> String {
     "https://evm-dev-t3.cronos.org".to_string()
 }
 
+fn default_ollama_cloud_model() -> String {
+    "deepseek-v3.1:671b".to_string()
+}
+
+fn default_ollama_local_model() -> String {
+    "gpt-oss:20b".to_string()
+}
+
 impl Default for WalletConfig {
     fn default() -> Self {
         Self {
@@ -522,6 +727,8 @@ impl Default for WalletConfig {
             cronos_rpc_url: default_rpc_url(),
             default_address: None,
             token_addresses: HashMap::new(),
+            ollama_cloud_model: default_ollama_cloud_model(),
+            ollama_local_model: default_ollama_local_model(),
         }
     }
 }
@@ -886,6 +1093,12 @@ fn main() -> LuaResult<()> {
     wallet_module.set(
         "generate_lua_code_with_provider",
         lua.create_function(generate_lua_code_with_provider)?,
+    )?;
+    wallet_module.set("get_ai_config", lua.create_function(get_ai_config)?)?;
+    wallet_module.set("set_ai_model", lua.create_function(set_ai_model)?)?;
+    wallet_module.set(
+        "list_ollama_cloud_models",
+        lua.create_function(list_ollama_cloud_models)?,
     )?;
     wallet_module.set("read_hidden", lua.create_function(read_hidden)?)?;
     wallet_module.set("display_image", lua.create_function(display_image)?)?;

@@ -162,7 +162,7 @@ local function print_menu()
 	print("6. Show Addresses (Multiple)")
 	print("7. Show Current Address")
 	print("8. Show Addresses & Keys")
-	print("9. AI - Ollama")
+	print("9. AI - Ollama (Local)")
 	print_separator()
 	print("            CRONOS EVM FUNCTIONS")
 	print_separator()
@@ -177,7 +177,9 @@ local function print_menu()
 	print("18. Toggle AI Autorun (" .. (ai_autorun and "ON" or "OFF") .. ")")
 	print("19. Logout")
 	print_separator()
+	print("90. AI - Ollama Cloud")
 	print("91. AI - OpenAI")
+	print("92. Select AI Model")
 	print("0. Exit")
 	print_separator()
 	io.write("Enter your choice: ")
@@ -414,8 +416,73 @@ end
 local function ai_mode(provider_override)
 	local current_provider = provider_override or ai_provider
 	local model_name = "unknown"
+	local ai_config = wallet.get_ai_config()
+
+	-- For Ollama Cloud, show model selection first
+	if current_provider == "ollama_cloud" then
+		print("\n>> Ollama Cloud - Select Model")
+		print("-------------------")
+		print("\nFetching available models...")
+
+		local success, models = pcall(function()
+			return wallet.list_ollama_cloud_models()
+		end)
+
+		if success and #models > 0 then
+			print("\nAvailable Models:")
+			print_separator()
+
+			-- Find default model index
+			local default_idx = 1
+			for i = 1, #models do
+				local m = models[i]
+				local marker = ""
+				if m.model == ai_config.ollama_cloud_model then
+					default_idx = i
+					marker = " [current]"
+				end
+				if m.description and m.description ~= "" then
+					print(string.format("%2d. %s (%s)%s", i, m.model, m.description, marker))
+				else
+					print(string.format("%2d. %s%s", i, m.model, marker))
+				end
+			end
+			print_separator()
+
+			io.write("\nSelect model [" .. default_idx .. "]: ")
+			io.flush()
+			local choice = io.read()
+
+			local selected_idx = default_idx
+			if choice and choice ~= "" then
+				local num = tonumber(choice)
+				if num and num >= 1 and num <= #models then
+					selected_idx = num
+				end
+			end
+
+			local selected_model = models[selected_idx].model
+			if selected_model ~= ai_config.ollama_cloud_model then
+				local set_success, err = pcall(function()
+					wallet.set_ai_model("ollama_cloud", selected_model)
+				end)
+				if set_success then
+					print("Model set to: " .. selected_model)
+					ai_config = wallet.get_ai_config()
+				else
+					print("Warning: Failed to save model preference: " .. tostring(err))
+				end
+			end
+		else
+			print("Could not fetch models. Using current model: " .. ai_config.ollama_cloud_model)
+		end
+		print()
+	end
+
 	if current_provider == "ollama" then
-		model_name = "gpt-oss:20b (local)"
+		model_name = ai_config.ollama_local_model .. " (local)"
+	elseif current_provider == "ollama_cloud" then
+		model_name = ai_config.ollama_cloud_model .. " (cloud)"
 	elseif current_provider == "openai" then
 		model_name = "gpt-4"
 	end
@@ -1078,6 +1145,142 @@ local function toggle_ai_autorun_menu()
 	end
 end
 
+-- Function to select AI model
+local function select_ai_model_menu()
+	print("\n>> Select AI Model")
+	print("-------------------")
+
+	-- Get current config
+	local ai_config = wallet.get_ai_config()
+
+	print("\nCurrent Models:")
+	print("  Ollama Local:  " .. ai_config.ollama_local_model)
+	print("  Ollama Cloud:  " .. ai_config.ollama_cloud_model)
+	print()
+
+	print("Which provider do you want to configure?")
+	print("1. Ollama Local")
+	print("2. Ollama Cloud")
+	print("0. Cancel")
+	print()
+
+	io.write("Enter choice: ")
+	io.flush()
+	local provider_choice = io.read()
+
+	if provider_choice == "0" then
+		print("\nCancelled.")
+		return
+	end
+
+	local provider = ""
+	local current_model = ""
+
+	if provider_choice == "1" then
+		provider = "ollama_local"
+		current_model = ai_config.ollama_local_model
+		print("\n>> Configure Ollama Local Model")
+		print("Current model: " .. current_model)
+		print("\nEnter the model name (e.g., gpt-oss:20b, llama3:8b, mistral:7b)")
+		print("Or press Enter to keep current model.")
+	elseif provider_choice == "2" then
+		provider = "ollama_cloud"
+		current_model = ai_config.ollama_cloud_model
+
+		print("\n>> Configure Ollama Cloud Model")
+		print("Current model: " .. current_model)
+		print("\nFetching available Ollama Cloud models...")
+
+		-- List available models
+		local success, models = pcall(function()
+			return wallet.list_ollama_cloud_models()
+		end)
+
+		if not success then
+			print("❌ Error fetching models: " .. tostring(models))
+			print("\nYou can manually enter a model name (e.g., deepseek-v3.1:671b)")
+			io.write("\nModel name [" .. current_model .. "]: ")
+			io.flush()
+			local model_input = io.read()
+			if model_input and model_input ~= "" then
+				local set_success, err = pcall(function()
+					wallet.set_ai_model(provider, model_input)
+				end)
+				if set_success then
+					print("\n✓ Ollama Cloud model set to: " .. model_input)
+				else
+					print("❌ Error: " .. tostring(err))
+				end
+			else
+				print("\nNo changes made.")
+			end
+			return
+		end
+
+		print("\nAvailable Ollama Cloud Models:")
+		print_separator()
+
+		for i = 1, #models do
+			local m = models[i]
+			print(string.format("%2d. %s", i, m.model))
+			print("    " .. m.description)
+		end
+		print_separator()
+
+		print("\nEnter model number (1-" .. #models .. ") or type model name directly")
+		print("Or press Enter to keep current model.")
+
+		io.write("\nYour choice: ")
+		io.flush()
+		local model_input = io.read()
+
+		if model_input and model_input ~= "" then
+			-- Check if it's a number
+			local num = tonumber(model_input)
+			local selected = nil
+			if num and num >= 1 and num <= #models then
+				selected = models[num].model
+			else
+				-- It's a custom model name
+				selected = model_input
+			end
+
+			local set_success, err = pcall(function()
+				wallet.set_ai_model(provider, selected)
+			end)
+			if set_success then
+				print("\n✓ Ollama Cloud model set to: " .. selected)
+			else
+				print("❌ Error: " .. tostring(err))
+			end
+		else
+			print("\nNo changes made.")
+		end
+		return
+	else
+		print("\n❌ Invalid choice.")
+		return
+	end
+
+	-- For Ollama Local (simple text input)
+	io.write("\nModel name [" .. current_model .. "]: ")
+	io.flush()
+	local model_input = io.read()
+
+	if model_input and model_input ~= "" then
+		local success, err = pcall(function()
+			wallet.set_ai_model(provider, model_input)
+		end)
+		if success then
+			print("\n✓ " .. provider .. " model set to: " .. model_input)
+		else
+			print("❌ Error: " .. tostring(err))
+		end
+	else
+		print("\nNo changes made.")
+	end
+end
+
 -- Function to handle logout
 local function logout_menu()
 	print("\n>> Logout")
@@ -1202,8 +1405,14 @@ local function main()
 			elseif choice == "19" then
 				logout_menu()
 				pause()
+			elseif choice == "90" then
+				ai_mode("ollama_cloud")
+				pause()
 			elseif choice == "91" then
 				ai_mode("openai")
+				pause()
+			elseif choice == "92" then
+				select_ai_model_menu()
 				pause()
 			elseif choice == "0" then
 				print("\n👋 Thank you for using ECDSA Wallet Manager!")

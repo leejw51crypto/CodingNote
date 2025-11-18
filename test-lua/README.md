@@ -7,7 +7,7 @@ A hierarchical deterministic (HD) wallet manager with Lua scripting support, bui
 - **HD Wallet Support**: BIP32/BIP39/BIP44 compliant wallet generation
 - **Multi-Chain Compatible**: Ethereum-style address generation
 - **Cronos EVM Integration**: Native token and ERC20 token support
-- **AI-Powered Scripting**: Generate and execute Lua code using OpenAI or Ollama (local)
+- **AI-Powered Scripting**: Generate and execute Lua code using Ollama (local/cloud) or OpenAI
 - **Session Management**: Login/logout functionality with persistent wallet sessions
 - **Secure Key Management**: Hidden input for sensitive data
 - **Interactive CLI**: Menu-driven interface for all wallet operations
@@ -57,17 +57,26 @@ The wallet creates an `info.json` file with default configuration:
 
 ### AI Features Setup
 
-**Option 1: Ollama (Local AI - Recommended)**
+**Option 1: Ollama Local (Recommended)**
 
 1. Install Ollama: https://ollama.ai/
-2. Pull the model:
+2. Pull a model:
 ```bash
 ollama pull gpt-oss:20b
 ```
 3. No API key needed - runs locally!
-4. Use menu option `9` for Ollama AI mode
+4. Use menu option `9` for Ollama Local AI mode
 
-**Option 2: OpenAI (Cloud AI)**
+**Option 2: Ollama Cloud**
+
+1. Get API key from https://ollama.com/settings/keys
+2. Set environment variable:
+```bash
+export OLLAMA_API_KEY="your-api-key-here"
+```
+3. Use menu option `90` for Ollama Cloud AI mode
+
+**Option 3: OpenAI (Cloud AI)**
 
 ```bash
 export OPENAI_API_KEY="your-api-key-here"
@@ -75,6 +84,10 @@ export OPENAI_API_KEY="your-api-key-here"
 
 Or create a `.env` file (make sure it's in `.gitignore`).
 Use menu option `91` for OpenAI AI mode.
+
+**Model Selection (Option 92)**
+
+Configure which model to use for each provider. Models are fetched dynamically from Ollama Cloud.
 
 ## Usage
 
@@ -131,7 +144,9 @@ Use menu option `91` for OpenAI AI mode.
 17. Set Default Address
 18. Toggle AI Autorun
 19. Logout
+90. AI - Ollama Cloud
 91. AI - OpenAI (Cloud AI)
+92. Select AI Model
 0.  Exit
 ```
 
@@ -159,12 +174,13 @@ You can use scientific notation: `1e18` for 1 token.
 
 ## AI Mode
 
-The wallet supports two AI providers:
+The wallet supports three AI providers:
 
-- **Option 9 - Ollama (Local)**: Runs AI models locally on your machine (default: `gpt-oss:20b`)
-- **Option 91 - OpenAI (Cloud)**: Uses OpenAI's GPT-4 API (requires API key)
+- **Option 9 - Ollama Local**: Runs AI models locally on your machine (default: `gpt-oss:20b`)
+- **Option 90 - Ollama Cloud**: Uses Ollama's cloud API (requires `OLLAMA_API_KEY`)
+- **Option 91 - OpenAI**: Uses OpenAI's GPT-4 API (requires `OPENAI_API_KEY`)
 
-Both modes generate Lua code based on natural language requests:
+All modes generate Lua code based on natural language requests:
 
 ### Examples:
 
@@ -179,7 +195,7 @@ AI> check the latest block number
 
 - **Enabled**: Code executes automatically without confirmation
 - **Disabled**: You'll be prompted to review code before execution
-- Toggle with menu option `17` or type `toggle` in AI mode
+- Toggle with menu option `18` or type `toggle` in AI mode
 
 ### Available Global Variables in AI Mode
 
@@ -263,7 +279,13 @@ If using OpenAI (option 91), set your API key:
 export OPENAI_API_KEY="sk-..."
 ```
 
-Alternatively, use Ollama (option 9) which doesn't require an API key.
+Alternatively, use Ollama Local (option 9) which doesn't require an API key.
+
+### "OLLAMA_API_KEY not set"
+If using Ollama Cloud (option 90), get your API key from https://ollama.com/settings/keys:
+```bash
+export OLLAMA_API_KEY="your-key-here"
+```
 
 ### "Failed to call Ollama API: Connection refused"
 Ensure Ollama is running:
