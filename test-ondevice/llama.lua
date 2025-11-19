@@ -97,6 +97,7 @@ ffi.cdef([[
     struct llama_context * llama_init_from_model(struct llama_model * model, struct llama_context_params params);
     void llama_free(struct llama_context * ctx);
     uint32_t llama_n_ctx(const struct llama_context * ctx);
+    uint32_t llama_n_batch(const struct llama_context * ctx);
 
     // Vocab functions
     const struct llama_vocab * llama_model_get_vocab(const struct llama_model * model);
@@ -144,12 +145,18 @@ ffi.cdef([[
     int32_t llama_decode(struct llama_context * ctx, struct llama_batch batch);
     float * llama_get_logits_ith(struct llama_context * ctx, int32_t i);
 
+    // Memory/KV cache
+    typedef struct llama_memory_i * llama_memory_t;
+    llama_memory_t llama_get_memory(const struct llama_context * ctx);
+    void llama_memory_clear(llama_memory_t mem, bool data);
+
     // Sampler functions
     struct llama_sampler_chain_params llama_sampler_chain_default_params(void);
     struct llama_sampler * llama_sampler_chain_init(struct llama_sampler_chain_params params);
     void llama_sampler_chain_add(struct llama_sampler * chain, struct llama_sampler * smpl);
     llama_token llama_sampler_sample(struct llama_sampler * smpl, struct llama_context * ctx, int32_t idx);
     void llama_sampler_accept(struct llama_sampler * smpl, llama_token token);
+    void llama_sampler_reset(struct llama_sampler * smpl);
     void llama_sampler_free(struct llama_sampler * smpl);
 
     // Sampler initializers
@@ -172,7 +179,17 @@ ffi.cdef([[
 ]])
 
 -- Load the llama.cpp shared library
-local lib_path = os.getenv("LLAMA_LIB_PATH") or "libllama.so"
+local lib_path = os.getenv("LLAMA_LIB_PATH")
+if not lib_path then
+	local os_name = ffi.os
+	if os_name == "OSX" then
+		lib_path = "libllama.dylib"
+	elseif os_name == "Windows" then
+		lib_path = "llama.dll"
+	else
+		lib_path = "libllama.so"
+	end
+end
 local llama = ffi.load(lib_path)
 
 -- Llama module
@@ -340,15 +357,32 @@ function Context:n_ctx()
 	return llama.llama_n_ctx(self._ctx)
 end
 
+function Context:clear_kv_cache()
+	local mem = llama.llama_get_memory(self._ctx)
+	llama.llama_memory_clear(mem, false)
+end
+
 function Context:decode(tokens)
 	local n_tokens = #tokens
-	local tokens_arr = ffi.new("llama_token[?]", n_tokens)
-	for i = 1, n_tokens do
-		tokens_arr[i - 1] = tokens[i]
+	local n_batch = llama.llama_n_batch(self._ctx)
+
+	-- Process tokens in batches to avoid exceeding n_batch limit
+	local pos = 1
+	while pos <= n_tokens do
+		local batch_size = math.min(n_batch, n_tokens - pos + 1)
+		local tokens_arr = ffi.new("llama_token[?]", batch_size)
+		for i = 0, batch_size - 1 do
+			tokens_arr[i] = tokens[pos + i]
+		end
+
+		local batch = llama.llama_batch_get_one(tokens_arr, batch_size)
+		if llama.llama_decode(self._ctx, batch) ~= 0 then
+			return false
+		end
+		pos = pos + batch_size
 	end
 
-	local batch = llama.llama_batch_get_one(tokens_arr, n_tokens)
-	return llama.llama_decode(self._ctx, batch) == 0
+	return true
 end
 
 -- Sampler class
@@ -416,9 +450,16 @@ function Sampler:accept(token)
 	llama.llama_sampler_accept(self._sampler, token)
 end
 
+function Sampler:reset()
+	llama.llama_sampler_reset(self._sampler)
+end
+
 -- High-level generation function
 function M.generate(model, ctx, sampler, prompt, max_tokens, callback)
 	max_tokens = max_tokens or 128
+
+	-- Clear KV cache before each generation to prevent overflow
+	ctx:clear_kv_cache()
 
 	local tokens = model:tokenize(prompt)
 	if not ctx:decode(tokens) then

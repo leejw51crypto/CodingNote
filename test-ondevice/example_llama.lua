@@ -4,7 +4,7 @@
 local llama = require("llama")
 
 -- Configuration
-local MODEL_PATH = os.getenv("MODEL_PATH") or "models/model.gguf"
+local MODEL_PATH = os.getenv("MODEL_PATH") or "models/gemma-3-1b-q4.gguf"
 
 -- Main function
 local function main()

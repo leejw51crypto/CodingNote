@@ -177,7 +177,7 @@ end
 
 -- Default configuration
 local default_config = {
-	model = "",
+	model = "gemma-3-1b-q4.gguf",
 	n_ctx = 4096,
 	n_batch = 512,
 	n_threads = 4,

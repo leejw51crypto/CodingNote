@@ -4,6 +4,10 @@
 
 mkdir -p models
 
+echo "Downloading Gemma 3 1B Q4 (tiny)..."
+curl -L -o models/gemma-3-1b-q4.gguf \
+    "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf"
+
 echo "Downloading Gemma 2 9B Q4..."
 curl -L -o models/gemma-2-9b-q4.gguf \
     "https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf"

@@ -16,11 +16,21 @@ if devnull >= 0 then
 end
 
 -- Set library path for Love2D (doesn't inherit shell env)
-local lib_path = love.filesystem.getSource() .. "/llama.cpp/build/bin/libllama.dylib"
+local os_name = ffi.os
+local lib_name
+if os_name == "OSX" then
+	lib_name = "libllama.dylib"
+elseif os_name == "Windows" then
+	lib_name = "llama.dll"
+else
+	lib_name = "libllama.so"
+end
+
+local lib_path = love.filesystem.getSource() .. "/" .. lib_name
 -- Check if running from fused app or directory
-if not love.filesystem.getInfo("llama.cpp") then
+if not love.filesystem.getInfo(lib_name) then
 	-- Fallback paths
-	lib_path = os.getenv("LLAMA_LIB_PATH") or "libllama.dylib"
+	lib_path = os.getenv("LLAMA_LIB_PATH") or lib_name
 end
 
 -- Override the environment variable for llama.lua
@@ -202,7 +212,7 @@ local app = {
 
 	-- Config
 	config = {
-		model = "",
+		model = "gemma-3-1b-q4.gguf",
 		n_ctx = 4096,
 		n_batch = 512,
 		n_threads = 4,
@@ -336,7 +346,10 @@ end
 
 function app.format_prompt(user_input)
 	local prompt = app.config.system_prompt .. "\n\n"
-	for _, msg in ipairs(app.messages) do
+	-- Exclude the last 2 messages (current user + empty assistant placeholder)
+	local history_end = #app.messages - 2
+	for i = 1, history_end do
+		local msg = app.messages[i]
 		if msg.role == "user" then
 			prompt = prompt .. "User: " .. msg.content .. "\n"
 		else
@@ -368,6 +381,10 @@ function app.send_message()
 	app.gen_coroutine = coroutine.create(function()
 		local prompt = app.format_prompt(user_msg)
 		local tokens = app.model:tokenize(prompt)
+
+		-- Clear KV cache and reset sampler before each generation
+		app.ctx:clear_kv_cache()
+		app.sampler:reset()
 
 		if not app.ctx:decode(tokens) then
 			app.messages[#app.messages].content = "[Error: Failed to decode]"
